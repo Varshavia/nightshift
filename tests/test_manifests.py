@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 
 from nightshift_core.manifests import (
+    declared_extras,
+    dependency_group_specs,
     parse_manifest,
     parse_pyproject,
     parse_requirements,
@@ -149,3 +151,50 @@ def test_round_trip_parse_rewrite_parse() -> None:
     reparsed = {d.name: d.version for d in parse_requirements(upgraded)}
     assert reparsed["requests"] == "2.20.0"
     assert reparsed["flask"] == "1.0.2"
+
+
+# --------------------------------------------------------------------------- #
+# Where projects actually declare their test dependencies
+# --------------------------------------------------------------------------- #
+
+MODERN = """\
+[project]
+name = "example"
+dependencies = ["requests==2.19.0"]
+
+[project.optional-dependencies]
+docs = ["sphinx"]
+
+[dependency-groups]
+tests = ["freezegun", "pytest"]
+dev = ["ruff", {include-group = "tests"}]
+cyclic = [{include-group = "cyclic"}]
+"""
+
+
+def test_declared_extras_are_read_rather_than_guessed() -> None:
+    """`pip install .[test]` exits zero when the extra does not exist.
+
+    Guessing extra names and trusting that exit code installs nothing, the suite
+    then fails at import, and we record BASELINE_RED for breakage we caused.
+    """
+    assert declared_extras(MODERN) == ("docs",)
+    assert "test" not in declared_extras(MODERN)
+
+
+def test_pep_735_dependency_groups_are_found() -> None:
+    """itsdangerous and loguru both keep their test deps here, not in an extra."""
+    assert dependency_group_specs(MODERN, "tests") == ["freezegun", "pytest"]
+
+
+def test_include_group_is_resolved() -> None:
+    assert dependency_group_specs(MODERN, "dev") == ["ruff", "freezegun", "pytest"]
+
+
+def test_a_cyclic_include_terminates() -> None:
+    assert dependency_group_specs(MODERN, "cyclic") == []
+
+
+def test_a_missing_group_is_empty_not_an_error() -> None:
+    assert dependency_group_specs(MODERN, "nope") == []
+    assert declared_extras("[project\nbroken") == ()

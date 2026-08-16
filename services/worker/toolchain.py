@@ -27,7 +27,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest, rewrite_pin
+from nightshift_core.manifests import (
+    RECOGNISED_MANIFESTS,
+    declared_extras,
+    dependency_group_specs,
+    parse_manifest,
+    rewrite_pin,
+)
 from nightshift_core.models import Dependency, Vulnerability
 
 __all__ = [
@@ -200,21 +206,19 @@ def read_dependencies(repo_path: Path) -> list[Dependency]:
     return dependencies
 
 
-def _install_plan(repo_path: Path) -> list[list[str]]:
-    """Candidate install commands, best first.
+#: Names projects conventionally give the group that holds their test
+#: dependencies, whether as an extra or as a PEP 735 dependency group.
+TEST_GROUP_NAMES: tuple[str, ...] = ("test", "tests", "dev", "testing", "all")
 
-    The extras are tried before the bare install on purpose. A project's test
-    dependencies almost always live in an extra, and installing without them
-    produces a suite that fails at import — which we would then mislabel
-    ``BASELINE_RED`` and blame on the repository. Getting this order wrong
-    poisons the headline number, so it is worth the extra attempts.
-    """
+#: pip says this and exits zero. Treating that as success is how a build
+#: installs nothing and calls itself finished.
+_MISSING_EXTRA = "does not provide the extra"
+
+
+def _base_install_plan(repo_path: Path) -> list[list[str]]:
+    """How to get the project itself installed. Nothing about tests yet."""
     plan: list[list[str]] = []
-    packaged = (repo_path / "pyproject.toml").is_file() or (repo_path / "setup.py").is_file()
-    if packaged:
-        plan.extend(
-            [["-e", f".[{extra}]"] for extra in ("test", "tests", "dev", "testing", "all")]
-        )
+    if (repo_path / "pyproject.toml").is_file() or (repo_path / "setup.py").is_file():
         plan.append(["-e", "."])
     for name in RECOGNISED_MANIFESTS:
         if name.endswith(".txt") and (repo_path / name).is_file():
@@ -222,11 +226,71 @@ def _install_plan(repo_path: Path) -> list[list[str]]:
     return plan
 
 
-def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sandbox:
-    """Create a virtualenv and install the repository into it.
+def _test_dependency_plan(repo_path: Path) -> list[tuple[str, list[str]]]:
+    """Ways to get the test dependencies, best first, as ``(label, pip args)``.
 
-    Raises :class:`EnvironmentBuildError` when nothing works — which becomes
-    ``UNBUILDABLE``, a counted outcome rather than a swallowed exception.
+    Read out of the project rather than guessed at. ``pip install .[test]``
+    exits **zero** when no such extra exists, so a builder that guesses names
+    and trusts the exit code reports success having installed nothing — and the
+    suite then fails at import. We would record that as ``BASELINE_RED`` and
+    blame the repository for breakage we caused ourselves, which quietly
+    corrupts the one number this project is judged on.
+
+    Both places modern projects put these are covered: ``optional-dependencies``
+    extras, and PEP 735 ``dependency-groups`` (which is where ``itsdangerous``
+    and ``loguru`` keep theirs).
+    """
+    plan: list[tuple[str, list[str]]] = []
+    pyproject = repo_path / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            text = pyproject.read_text(encoding="utf-8")
+        except UnicodeDecodeError:  # pragma: no cover - rare, but real
+            text = ""
+        extras = set(declared_extras(text))
+        for name in TEST_GROUP_NAMES:
+            if name in extras:
+                plan.append((f"extra:{name}", ["-e", f".[{name}]"]))
+        for name in TEST_GROUP_NAMES:
+            specs = dependency_group_specs(text, name)
+            if specs:
+                plan.append((f"group:{name}", specs))
+
+    for name in RECOGNISED_MANIFESTS:
+        if (
+            name.endswith(".txt")
+            and any(marker in name for marker in ("dev", "test"))
+            and (repo_path / name).is_file()
+        ):
+            plan.append((f"file:{name}", ["-r", name]))
+    return plan
+
+
+def _collects(sandbox: Sandbox) -> bool:
+    """Can pytest import the suite at all?
+
+    Collection is cheap and it is the honest test of whether the environment is
+    complete. Exit 5 (nothing collected) counts as collecting: the environment
+    is fine, the repository simply has no tests, which is a different finding.
+    """
+    result = sandbox.run(
+        [sandbox.python, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        timeout=300,
+    )
+    return result.returncode in {0, 5}
+
+
+def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sandbox:
+    """Create a virtualenv, install the project, then make its suite importable.
+
+    Two phases on purpose. Getting the project installed is not the same problem
+    as getting its tests runnable, and conflating them is what produced a
+    misleading ``BASELINE_RED`` on three of the first four real repositories we
+    probed.
+
+    Raises :class:`EnvironmentBuildError` when the project itself cannot be
+    installed — which becomes ``UNBUILDABLE``, a counted outcome rather than a
+    swallowed exception.
     """
     venv_path = venv_path or repo_path.parent / ".venv"
     created = subprocess.run(
@@ -242,35 +306,44 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     python = venv_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     sandbox = Sandbox(repo_path=repo_path, python=python)
 
-    sandbox.run(
-        [python, "-m", "pip", "install", "-q", "-U", "pip", "setuptools", "wheel"],
-        timeout=INSTALL_TIMEOUT,
-    )
+    def pip(arguments: Sequence[str], label: str) -> bool:
+        result = sandbox.run(
+            [python, "-m", "pip", "install", "-q", *arguments], timeout=INSTALL_TIMEOUT
+        )
+        combined = (result.stdout or "") + (result.stderr or "")
+        ok = result.returncode == 0 and _MISSING_EXTRA not in combined
+        sandbox.install_log.append(f"{label} -> {'ok' if ok else 'failed'}")
+        return ok
 
-    plan = _install_plan(repo_path)
-    if not plan:
+    pip(["-U", "pip", "setuptools", "wheel"], "bootstrap")
+
+    # -- phase one: the project itself -------------------------------------- #
+    base = _base_install_plan(repo_path)
+    if not base:
         raise EnvironmentBuildError("no recognised manifest and no packaging metadata")
-
-    installed = False
-    for arguments in plan:
-        result = sandbox.run([python, "-m", "pip", "install", "-q", *arguments],
-                             timeout=INSTALL_TIMEOUT)
-        sandbox.install_log.append(f"pip install {' '.join(arguments)} -> {result.returncode}")
-        if result.returncode == 0:
-            installed = True
-            break
-
-    if not installed:
+    if not any(pip(arguments, f"base:{' '.join(arguments)}") for arguments in base):
         raise EnvironmentBuildError(
-            "every install strategy failed:\n" + "\n".join(sandbox.install_log)
+            "the project would not install:\n" + "\n".join(sandbox.install_log)
         )
 
-    # pytest may not be a declared dependency even when the suite is written for
-    # it. Installing it is not "fixing" the repository — it is supplying the
-    # runner, the way CI would.
+    # pytest may not be declared anywhere even when the suite is written for it.
+    # Installing it is not "fixing" the repository — it is supplying the runner,
+    # the way CI would.
     if sandbox.run([python, "-c", "import pytest"], timeout=60).returncode != 0:
-        sandbox.run([python, "-m", "pip", "install", "-q", "pytest"], timeout=INSTALL_TIMEOUT)
+        pip(["pytest"], "runner:pytest")
 
+    # -- phase two: make the suite importable ------------------------------- #
+    if _collects(sandbox):
+        return sandbox
+    for label, arguments in _test_dependency_plan(repo_path):
+        pip(arguments, label)
+        if _collects(sandbox):
+            return sandbox
+
+    # Collection still fails. Not an error: the suite may be genuinely broken,
+    # which is a real finding. The caller sees the exit code and the install log
+    # and decides — this function does not get to make that call.
+    sandbox.install_log.append("collection still failing after every strategy")
     return sandbox
 
 
