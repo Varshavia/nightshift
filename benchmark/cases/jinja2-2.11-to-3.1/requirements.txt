@@ -1,0 +1,6 @@
+# A deliberately old pin. Jinja2 2.x re-exported Markup and escape at the top
+# level; 3.0 removed them, so this upgrade breaks any code that imported them.
+jinja2==2.11.3
+# Held down because Jinja2 2.11 imports soft_unicode, which MarkupSafe 2.1
+# removed. Without this the baseline would be red for a reason of our own making.
+markupsafe==2.0.1

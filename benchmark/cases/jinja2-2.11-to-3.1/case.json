@@ -1,0 +1,11 @@
+{
+  "id": "jinja2-2.11-to-3.1",
+  "tier": "A",
+  "package": "jinja2",
+  "from_version": "2.11.3",
+  "to_version": "3.1.2",
+  "break_kind": "removed-top-level-name",
+  "expected_failure": "ImportError: cannot import name 'Markup' from 'jinja2'",
+  "notes": "Jinja2 3.0 removed the top-level Markup and escape re-exports. The suite fails during collection, before any test runs, which is the most common shape of a real upgrade break.",
+  "verified_on": "2026-08-16"
+}
