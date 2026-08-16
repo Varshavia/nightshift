@@ -1,0 +1,6 @@
+# Scanner: reads manifests, queries OSV, triages with Gemma, publishes.
+httpx>=0.27
+packaging>=24.0
+google-cloud-pubsub>=2.23
+google-cloud-firestore>=2.17
+google-genai>=1.0
