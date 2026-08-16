@@ -75,6 +75,8 @@ class Settings:
     model_backend: str = "vertex"
 
     fork_org: str = ""
+    #: Read from the environment, never logged, never persisted, never defaulted.
+    github_token: str | None = None
 
     allow_upstream_prs: bool = False
     ceilings: Ceilings = field(default_factory=Ceilings)
@@ -90,6 +92,7 @@ class Settings:
             triage_model=_env("NIGHTSHIFT_TRIAGE_MODEL", "gemma-3-27b-it"),
             model_backend=_env("NIGHTSHIFT_MODEL_BACKEND", "vertex"),
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),
+            github_token=_env("GITHUB_TOKEN") or None,
             allow_upstream_prs=_env_bool("ALLOW_UPSTREAM_PRS", False),
             ceilings=Ceilings.from_env(),
         )
