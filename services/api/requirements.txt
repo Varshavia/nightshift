@@ -1,0 +1,4 @@
+# Read model for the control tower. Read-mostly by design.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+google-cloud-firestore>=2.17
