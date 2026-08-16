@@ -16,6 +16,10 @@ nights end here, and they are cheap.
 **Only then repair.** The loop is bounded by the ceilings in
 :class:`nightshift_core.config.Ceilings`, checked by the policy engine before
 every tool call. Exhausting them is ``REPAIR_EXHAUSTED``, a real result.
+
+Everything up to and including VERIFY is implemented and calls no model — see
+``toolchain.py``. That is what lets ``scripts/probe_fleet.py`` measure the whole
+fleet for free before a token is spent.
 """
 
 from __future__ import annotations
@@ -27,66 +31,36 @@ from nightshift_core.config import Settings, get_settings
 from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import JobStore
+from services.worker.toolchain import (
+    EnvironmentBuildError,
+    Sandbox,
+    TestReport,
+    UpgradeError,
+    apply_upgrade,
+    build_environment,
+    clone,
+    run_tests,
+)
 
 log = logging.getLogger("nightshift.worker")
 
 
-class EnvironmentBuildError(RuntimeError):
-    """The repository's dependencies could not be installed.
-
-    Its own exception type rather than a bare ``RuntimeError`` because this is
-    the most common way a job ends at fleet scale, and it must map to
-    ``UNBUILDABLE`` — a counted result — rather than disappear into a generic
-    error path.
-    """
-
-
-class TestRunResult:
-    """Outcome of one test invocation: exit status plus the output to reason on."""
-
-    def __init__(self, passed: bool, output: str, duration_seconds: float) -> None:
-        self.passed = passed
-        self.output = output
-        self.duration_seconds = duration_seconds
-
-
-def clone(job: RepoJob, workspace: Path) -> Path:
-    """Shallow-clone the fork into the sandbox. Returns the working tree."""
-    raise NotImplementedError("worker: clone")
-
-
-def build_environment(repo_path: Path) -> None:
-    """Install the repository's dependencies.
-
-    Expected to fail often — this is the hardest part of the whole system, not
-    the agent. Failure here raises :class:`EnvironmentBuildError` and becomes
-    ``UNBUILDABLE``: a first-class outcome, counted and displayed, never
-    swallowed as an error.
-    """
-    raise NotImplementedError("worker: build_environment")
-
-
-def run_tests(repo_path: Path) -> TestRunResult:
-    """Run the repository's own suite, exactly as it defines it."""
-    raise NotImplementedError("worker: run_tests")
-
-
-def apply_upgrade(job: RepoJob, repo_path: Path) -> None:
-    """Rewrite the manifest to the fixed versions and reinstall."""
-    raise NotImplementedError("worker: apply_upgrade")
-
-
-def repair(job: RepoJob, repo_path: Path, failure: TestRunResult, policy: PolicyEngine) -> bool:
+def repair(
+    job: RepoJob, sandbox: Sandbox, failure: TestReport, policy: PolicyEngine, budget: Budget
+) -> bool:
     """Run the bounded repair loop. True when the suite ends green.
 
     Each turn: give the agent the failing output and the diff so far, let it
     make one conceptual fix, re-run the suite, record a
     :class:`~nightshift_core.models.RepairAttempt` whether or not it worked.
+
+    The only place in the worker where a model is called, and the only place
+    with a ceiling on attempts, wall-clock and tokens.
     """
     raise NotImplementedError("worker: repair")
 
 
-def open_pull_request(job: RepoJob, repo_path: Path, policy: PolicyEngine) -> str:
+def open_pull_request(job: RepoJob, sandbox: Sandbox, policy: PolicyEngine) -> str:
     """Open the PR from ``templates/pr_body.md``. Returns its url.
 
     The body carries the advisory, the version transition, the repair diff, the
@@ -100,58 +74,68 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
     settings = settings or get_settings()
     policy = PolicyEngine(settings=settings)
     budget = Budget()
-    workspace = Path("/workspace") / job.job_id.replace(":", "_")
+    workspace = Path("/workspace") / job.job_id.replace(":", "_").replace("/", "_")
 
     def checkpoint(phase: Phase) -> None:
         job.advance(phase)
         store.put(job)
 
+    def finish(outcome: Outcome, *, pr_url: str | None = None, notes: str = "") -> RepoJob:
+        job.finish(outcome, pr_url=pr_url, notes=notes)
+        store.put(job)
+        log.info("job %s finished as %s (%d tokens)", job.job_id, job.outcome, job.tokens_used)
+        return job
+
     checkpoint(Phase.CLONING)
-    repo_path = clone(job, workspace)
+    try:
+        repo_path = clone(job.repo, workspace, token=settings.github_token)
+    except EnvironmentBuildError as exc:
+        return finish(Outcome.INFRA_ERROR, notes=f"clone failed: {exc}"[:500])
 
     checkpoint(Phase.BASELINE)
     try:
-        build_environment(repo_path)
-    except EnvironmentBuildError:
-        job.finish(Outcome.UNBUILDABLE, notes="dependency installation failed")
-        store.put(job)
-        return job
+        sandbox = build_environment(repo_path)
+    except EnvironmentBuildError as exc:
+        return finish(Outcome.UNBUILDABLE, notes=str(exc)[:500])
 
-    baseline = run_tests(repo_path)
+    baseline = run_tests(sandbox)
     job.baseline_green = baseline.passed
+    if baseline.internal_error:
+        return finish(Outcome.INFRA_ERROR, notes=f"pytest exit {baseline.exit_code}")
+    if not baseline.collected:
+        # No tests means the suite cannot serve as evidence that a repair worked.
+        # Reported as UNBUILDABLE with an explicit note rather than given its own
+        # enum member: adding one requires an ADR. See docs/decisions/0003.
+        return finish(Outcome.UNBUILDABLE, notes="pytest collected no tests")
     if not baseline.passed:
-        job.finish(Outcome.BASELINE_RED, notes="suite was already failing before the upgrade")
-        store.put(job)
-        return job
+        return finish(Outcome.BASELINE_RED, notes="suite was already failing before the upgrade")
 
     checkpoint(Phase.UPGRADE)
-    if not job.actionable_vulnerabilities:
-        job.finish(Outcome.NO_FIX_AVAILABLE, notes="no published fix for any advisory")
-        store.put(job)
-        return job
-    apply_upgrade(job, repo_path)
+    fixable = job.actionable_vulnerabilities
+    if not fixable:
+        return finish(Outcome.NO_FIX_AVAILABLE, notes="no published fix for any advisory")
+    try:
+        apply_upgrade(sandbox, fixable)
+    except UpgradeError as exc:
+        return finish(Outcome.INFRA_ERROR, notes=f"upgrade failed: {exc}"[:500])
 
     checkpoint(Phase.VERIFY)
-    verified = run_tests(repo_path)
+    verified = run_tests(sandbox)
 
     repaired = False
     if not verified.passed:
         checkpoint(Phase.REPAIR)
-        repaired = repair(job, repo_path, verified, policy)
+        repaired = repair(job, sandbox, verified, policy, budget)
         if not repaired:
-            job.finish(Outcome.REPAIR_EXHAUSTED, notes="ceiling reached with the suite still red")
-            store.put(job)
-            return job
+            return finish(
+                Outcome.REPAIR_EXHAUSTED, notes="ceiling reached with the suite still red"
+            )
 
     checkpoint(Phase.OPENING_PR)
-    pr_url = open_pull_request(job, repo_path, policy)
-    job.finish(
-        Outcome.PATCHED_REPAIRED if repaired else Outcome.PATCHED_CLEAN,
-        pr_url=pr_url,
+    pr_url = open_pull_request(job, sandbox, policy)
+    return finish(
+        Outcome.PATCHED_REPAIRED if repaired else Outcome.PATCHED_CLEAN, pr_url=pr_url
     )
-    store.put(job)
-    log.info("job %s finished as %s (%d tokens)", job.job_id, job.outcome, budget.tokens)
-    return job
 
 
 if __name__ == "__main__":  # pragma: no cover
