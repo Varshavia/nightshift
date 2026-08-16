@@ -1,0 +1,73 @@
+---
+config:
+  theme: base
+  themeVariables:
+    primaryColor: "#eef2ff"
+    primaryTextColor: "#0f172a"
+    primaryBorderColor: "#6366f1"
+    lineColor: "#475569"
+    fontSize: "15px"
+---
+flowchart TB
+    subgraph nightly["① NIGHTLY SCAN — one process, whole fleet, then exits"]
+        direction LR
+        SCH["Cloud Scheduler<br/>02:00 daily"] --> SCAN["Scanner<br/>Cloud Run Job"]
+        POOL[("Fork pool<br/>reviewed list")] --> SCAN
+        SCAN --> OSV["OSV.dev<br/><b>one</b> batched query"]
+        OSV --> TRIAGE["Gemma triage<br/>drop the noise"]
+        TRIAGE --> PS(["Pub/Sub<br/>1 message per affected repo"])
+    end
+
+    PS --> W1["Worker 1"]
+    PS --> W2["Worker 2"]
+    PS --> WN["Worker N"]
+
+    subgraph worker["② INSIDE ONE WORKER — Cloud Run Job, isolated sandbox"]
+        CLONE["clone fork"] --> BASE["<b>BASELINE</b><br/>run the suite untouched"]
+        BASE -->|"already red"| RED(["BASELINE_RED"])
+        BASE -->|"won't build"| UNB(["UNBUILDABLE"])
+        BASE -->|"green"| UPG["<b>UPGRADE</b><br/>rewrite the manifest"]
+        UPG --> VER["<b>VERIFY</b><br/>run the suite again"]
+        VER -->|"still green"| CLEAN(["PATCHED_CLEAN<br/><i>no model called</i>"])
+        VER -->|"red"| AGENT
+
+        subgraph repair["③ REPAIR LOOP — this is the product"]
+            direction TB
+            AGENT["<b>Gemini 3.5 agent</b><br/>read the traceback,<br/>read the library's own source,<br/>make one conceptual fix"]
+            POL{{"POLICY ENGINE<br/>every tool call"}}
+            RUN["re-run the suite"]
+            MEM[("ADK Memory Bank<br/>keyed by library + from→to")]
+            AGENT --> POL
+            POL -->|"deny: tests, CI, escape,<br/>merge, force-push"| AGENT
+            POL -->|"allow"| RUN
+            RUN -->|"still red,<br/>budget remaining"| AGENT
+            RUN -.->|"what worked"| MEM
+            MEM -.->|"seen before?"| AGENT
+        end
+
+        RUN -->|"green"| PR["open the PR<br/>AI authorship disclosed"]
+        AGENT -->|"ceiling hit"| EXH(["REPAIR_EXHAUSTED"])
+        PR --> DONE(["PATCHED_REPAIRED"])
+    end
+
+    W1 --> CLONE
+    BASE -.-> FS
+    UPG -.-> FS
+    RUN -.-> FS
+    DONE -.-> FS
+    FS[("Firestore<br/>checkpoint per phase")] --> API["Read API<br/>Cloud Run"]
+    API --> DASH["Control tower<br/>Next.js"]
+
+    classDef outcome fill:#0f172a,stroke:#0f172a,color:#f8fafc,font-weight:bold
+    classDef star fill:#fff7ed,stroke:#f59e0b,stroke-width:3px,color:#7c2d12
+    classDef policy fill:#fef2f2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d
+    classDef gate fill:#f1f5f9,stroke:#475569,color:#0f172a
+
+    class RED,UNB,CLEAN,EXH,DONE outcome
+    class AGENT star
+    class POL policy
+    class BASE,UPG,VER gate
+
+    style nightly fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:4 3
+    style worker fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:4 3
+    style repair fill:#fffbeb,stroke:#f59e0b,stroke-width:3px
