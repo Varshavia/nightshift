@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets — never commit anything credential-shaped. See CLAUDE.md §3.
+.env
+.env.*
+!.env.example
+*.pem
+*-key.json
+service-account*.json
+
+# Agent scratch space: cloned repositories and run artefacts
+.nightshift/
+workspaces/
+
+# Node / dashboard
+node_modules/
+.next/
+out/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
