@@ -404,7 +404,7 @@ def test_diff_stats_counts_files_and_lines() -> None:
         "+x = 1\n"
     )
     stats = diff_stats(diff)
-    assert (stats.files, stats.added, stats.removed) == (2, 3, 1)
+    assert (stats.files, stats.added, stats.removed) == (2, 2, 1)
 
 
 def test_diff_stats_of_an_empty_diff_is_all_zero() -> None:
