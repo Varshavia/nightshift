@@ -74,6 +74,10 @@ class UpgradeError(RuntimeError):
 class TestReport:
     """One invocation of the repository's own test suite."""
 
+    #: Not a test class. The name is right for the domain and wrong for pytest's
+    #: collector, which would otherwise warn on every module that imports it.
+    __test__ = False
+
     passed: bool
     output: str
     duration_seconds: float

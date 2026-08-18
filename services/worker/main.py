@@ -31,6 +31,8 @@ from nightshift_core.config import Settings, get_settings
 from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import JobStore
+from services.worker.agent import build_repair_agent
+from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
     EnvironmentBuildError,
     Sandbox,
@@ -46,7 +48,12 @@ log = logging.getLogger("nightshift.worker")
 
 
 def repair(
-    job: RepoJob, sandbox: Sandbox, failure: TestReport, policy: PolicyEngine, budget: Budget
+    job: RepoJob,
+    sandbox: Sandbox,
+    failure: TestReport,
+    policy: PolicyEngine,
+    budget: Budget,
+    agent: RepairAgent,
 ) -> bool:
     """Run the bounded repair loop. True when the suite ends green.
 
@@ -55,9 +62,11 @@ def repair(
     :class:`~nightshift_core.models.RepairAttempt` whether or not it worked.
 
     The only place in the worker where a model is called, and the only place
-    with a ceiling on attempts, wall-clock and tokens.
+    with a ceiling on attempts, wall-clock and tokens. The implementation lives
+    in ``repair.py`` so that the loop can be tested with a scripted agent and no
+    token spent; this stays as the worker's own vocabulary.
     """
-    raise NotImplementedError("worker: repair")
+    return run_repair_loop(job, sandbox, failure, policy, budget, agent)
 
 
 def open_pull_request(job: RepoJob, sandbox: Sandbox, policy: PolicyEngine) -> str:
@@ -129,7 +138,10 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
     repaired = False
     if not verified.passed:
         checkpoint(Phase.REPAIR)
-        repaired = repair(job, sandbox, verified, policy, budget)
+        # Built here rather than at the top of ``handle``: a PATCHED_CLEAN job
+        # never reaches this line, and it should never pay to construct an agent
+        # it will not use.
+        repaired = repair(job, sandbox, verified, policy, budget, build_repair_agent(settings))
         if not repaired:
             return finish(
                 Outcome.REPAIR_EXHAUSTED, notes="ceiling reached with the suite still red"
