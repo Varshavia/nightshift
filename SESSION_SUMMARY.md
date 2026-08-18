@@ -34,10 +34,11 @@ true?", and a status block alone loses the reasoning.
 
 | | |
 |---|---|
-| **Branch** | `docs/migration-ledger` — design and docs only, no code yet. `main` is at 14 commits. |
+| **Branch** | `feat/repair-loop`, branched from `docs/migration-ledger`. Neither is pushed. `main` is at 14 commits. |
 | **Green** | Core domain, policy engine, OSV client, config/stores, manifest parsing, worker toolchain (clone · build · test · upgrade), zero-token fleet probe, benchmark Tier A case #1. |
 | **Direction** | **The Migration Ledger — approved.** Spec: `docs/superpowers/specs/2026-08-19-migration-ledger-design.md`. ADR 0004. Four agents: Triage, Repair, Librarian, Reviewer. |
-| **Next action** | **Execute Block 1** — `docs/superpowers/plans/2026-08-19-block-1-repair-loop.md`, seven tasks, TDD. Nothing else in the design matters until `make run-local` opens a real PR. |
+| **Block 1 progress** | **Task 1 of 7 done** — `services/worker/tools.py`, the policy-gated tool layer, 8 tests. Also fixed a latent bug: the policy engine was built before the clone existed and against a hard-coded `/workspace`, so every local path read as a sandbox escape. |
+| **Next action** | **Task 2** — diff capture in `toolchain.py`. Then 3 (repair loop), 4 (PR body), 5 (open PR), 6 (ADK agent), 7 (end to end). Plan: `docs/superpowers/plans/2026-08-19-block-1-repair-loop.md`. |
 | **Not built** | The repair loop (Block 1). The Ledger (Block 2). Registry, identities, Model Armor, Reviewer (Block 3). Scanner's `load_fleet` / `read_manifests` / `publish`. API approvals. Fork-pool scripts. `dashboard/`. |
 
 **Cut line: 27 August.** If Block 2 is not working by then, ship Block 1 plus
@@ -54,6 +55,14 @@ here on, and re-run before quoting it to a judge.
 **Local dev note:** the repo needs `.venv` (gitignored). The system `python3`
 on this machine is 3.11.3 with no pytest — running `pytest` outside the venv
 fails confusingly. Use `.venv/bin/python -m pytest`, or activate first.
+
+**Task 6 risk, checked 19 Aug:** `google-adk` resolves — 2.7.1 is current and
+the `>=2.0` pin in `services/worker/requirements.txt` is satisfiable. The
+*dependency* is fine; the `LlmAgent` / `FunctionTool` / `run` **API surface** in
+the plan is still written from documentation rather than from the installed
+package. Verify it when Task 6 starts, and change only
+`GeminiRepairAgent.attempt` — the `RepairAgent` Protocol exists to keep that
+churn out of everything else.
 
 ---
 
