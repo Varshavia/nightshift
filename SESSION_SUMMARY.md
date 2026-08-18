@@ -44,11 +44,16 @@ true?", and a status block alone loses the reasoning.
 governance, drop the curve to a smaller N, and report it as measured. See §8 of
 the spec.
 
-**Unverified claim to watch:** `make check` has still not been run on this
-machine (local `python3` is 3.11.3 with no pytest and there is no `.venv`).
-Nobody has confirmed the suite is green since PR #2 merged. The "88 tests"
-figure was removed from the README rather than repeated — a static count finds
-80 test functions. Confirm before quoting a number anywhere a judge reads it.
+**Resolved 19 Aug — `make check` is green.** `.venv` created with
+`python3 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"`.
+**113 tests pass**, ruff clean, `mypy --strict` clean across 28 source files.
+The old "88 tests" figure was stale, not wrong-in-kind: 80 test *functions*
+expand to 113 test *cases* through parametrization. Quote **113 tests** from
+here on, and re-run before quoting it to a judge.
+
+**Local dev note:** the repo needs `.venv` (gitignored). The system `python3`
+on this machine is 3.11.3 with no pytest — running `pytest` outside the venv
+fails confusingly. Use `.venv/bin/python -m pytest`, or activate first.
 
 ---
 
