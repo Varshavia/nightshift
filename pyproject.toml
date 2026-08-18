@@ -68,5 +68,5 @@ strict = true
 warn_unreachable = true
 # Third-party packages without stubs. Keep this list short and justified.
 [[tool.mypy.overrides]]
-module = ["google.cloud.*", "google.adk.*"]
+module = ["google.cloud.*", "google.adk.*", "github.*"]
 ignore_missing_imports = true

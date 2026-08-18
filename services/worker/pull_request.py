@@ -8,12 +8,27 @@ is not something a future refactor gets to drop quietly.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Any, Protocol
 
+from nightshift_core.config import Settings
 from nightshift_core.models import RepoJob
-from services.worker.toolchain import diff_stats
+from nightshift_core.policy import Decision, PolicyEngine, ToolCall
+from services.worker.toolchain import Sandbox, diff_stats
 
-__all__ = ["PR_TEMPLATE_PATH", "render_pr_body"]
+__all__ = [
+    "PR_TEMPLATE_PATH",
+    "GitHubClient",
+    "PullRequestBlocked",
+    "PyGithubClient",
+    "open_pr",
+    "render_pr_body",
+]
+
+log = logging.getLogger("nightshift.pr")
+
+GIT_TIMEOUT = 300
 
 PR_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "templates" / "pr_body.md"
 
@@ -67,3 +82,107 @@ def render_pr_body(
         job_id=job.job_id,
         model=model,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Opening it
+# --------------------------------------------------------------------------- #
+
+
+class PullRequestBlocked(RuntimeError):
+    """The policy engine refused to open this pull request."""
+
+    def __init__(self, decision: Decision) -> None:
+        super().__init__(f"[{decision.rule}] {decision.reason}")
+        self.decision = decision
+
+
+class GitHubClient(Protocol):
+    """What opening a pull request needs, and nothing more."""
+
+    def create_pull_request(self, repo: str, head: str, title: str, body: str) -> str: ...
+
+
+class PyGithubClient:
+    """The real client. Constructed lazily so importing this module needs no token."""
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+        self._github: Any | None = None
+
+    @property
+    def github(self) -> Any:
+        if self._github is None:
+            from github import Auth, Github
+
+            self._github = Github(auth=Auth.Token(self._token))
+        return self._github
+
+    def create_pull_request(self, repo: str, head: str, title: str, body: str) -> str:
+        repository = self.github.get_repo(repo)
+        pull = repository.create_pull(
+            title=title, body=body, head=head, base=repository.default_branch
+        )
+        return str(pull.html_url)
+
+
+def open_pr(
+    job: RepoJob,
+    sandbox: Sandbox,
+    policy: PolicyEngine,
+    settings: Settings,
+    client: GitHubClient,
+    *,
+    baseline_green: bool,
+    model: str,
+    test_command: str = "pytest -q",
+) -> str:
+    """Branch, commit, push and open. Returns the pull request url.
+
+    The policy check happens *before* anything is branched or committed: a
+    denial must not leave a branch behind that no pull request will ever
+    reference.
+    """
+    vulnerability = job.vulnerabilities[0]
+    decision = policy.check(
+        ToolCall("open_pull_request", {"repo": job.repo, "auto_merge": False})
+    )
+    if not decision.allowed:
+        raise PullRequestBlocked(decision)
+
+    run_id, _, _ = job.job_id.partition(":")
+    branch = f"nightshift/{vulnerability.package}-{vulnerability.fixed_version}-{run_id}"
+    title = (
+        f"Security: {vulnerability.package} "
+        f"{vulnerability.installed_version} → {vulnerability.fixed_version}"
+    )
+    body = render_pr_body(
+        job,
+        baseline_green=baseline_green,
+        test_command=test_command,
+        model=model,
+        max_attempts=settings.ceilings.max_repair_attempts,
+    )
+
+    for argv in (
+        ["git", "checkout", "-b", branch],
+        ["git", "add", "-A"],
+        ["git", "commit", "-m", title, "-m", "Opened by Nightshift, an autonomous agent fleet."],
+    ):
+        result = sandbox.run(argv, timeout=GIT_TIMEOUT)
+        if result.returncode != 0:
+            raise RuntimeError(f"{' '.join(argv)} failed: {result.stderr[-500:]}")
+
+    if settings.github_token:
+        pushed = sandbox.run(["git", "push", "origin", branch], timeout=GIT_TIMEOUT)
+        if pushed.returncode != 0:
+            raise RuntimeError(f"push failed: {pushed.stderr[-500:]}")
+    else:
+        # The local-development path. `make run-local` against a scratch clone
+        # has no remote to push to, and failing there would make the loop
+        # untestable without a credential.
+        log.warning("no GITHUB_TOKEN; branch %s committed but not pushed", branch)
+
+    url = client.create_pull_request(repo=job.repo, head=branch, title=title, body=body)
+    log.info("job %s opened %s", job.job_id, url)
+    return url

@@ -32,6 +32,7 @@ from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import JobStore
 from services.worker.agent import build_repair_agent
+from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
     EnvironmentBuildError,
@@ -69,13 +70,25 @@ def repair(
     return run_repair_loop(job, sandbox, failure, policy, budget, agent)
 
 
-def open_pull_request(job: RepoJob, sandbox: Sandbox, policy: PolicyEngine) -> str:
+def open_pull_request(
+    job: RepoJob, sandbox: Sandbox, policy: PolicyEngine, settings: Settings | None = None
+) -> str:
     """Open the PR from ``templates/pr_body.md``. Returns its url.
 
     The body carries the advisory, the version transition, the repair diff, the
     agent's explanation, and the AI-authorship disclosure. Nothing merges itself.
     """
-    raise NotImplementedError("worker: open_pull_request")
+    settings = settings or get_settings()
+    client = PyGithubClient(settings.github_token or "")
+    return open_pr(
+        job,
+        sandbox,
+        policy,
+        settings,
+        client,
+        baseline_green=bool(job.baseline_green),
+        model=settings.repair_model,
+    )
 
 
 def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> RepoJob:
@@ -148,7 +161,12 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
             )
 
     checkpoint(Phase.OPENING_PR)
-    pr_url = open_pull_request(job, sandbox, policy)
+    try:
+        pr_url = open_pull_request(job, sandbox, policy, settings)
+    except PullRequestBlocked as exc:
+        # A refusal here is one the job cannot proceed past — unlike a denied
+        # tool call inside the repair loop, which the agent can recover from.
+        return finish(Outcome.POLICY_BLOCKED, notes=str(exc)[:500])
     return finish(
         Outcome.PATCHED_REPAIRED if repaired else Outcome.PATCHED_CLEAN, pr_url=pr_url
     )
