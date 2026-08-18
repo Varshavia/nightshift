@@ -747,8 +747,8 @@ def run_repair_loop(
     agent: RepairAgent,
     *,
     tools: SandboxTools | None = None,
-    run_suite: Callable[..., TestReport] = run_tests,
-    capture: Callable[[Sandbox], str] = capture_diff,
+    run_suite: Callable[..., TestReport] | None = None,
+    capture: Callable[[Sandbox], str] | None = None,
 ) -> bool:
     """Repair until the suite is green or a ceiling is reached. True when green.
 
@@ -756,6 +756,11 @@ def run_repair_loop(
     green suite means ``PATCHED_REPAIRED`` here and something else in a probe.
     """
     tools = tools or SandboxTools(sandbox=sandbox, policy=policy, budget=budget)
+    # Resolved here, not as default arguments: a default binds the function
+    # object at definition time and a test patching the module attribute would
+    # never reach it.
+    run_suite = run_suite or run_tests
+    capture = capture or capture_diff
     failing_output = failure.output
 
     while True:
@@ -1753,6 +1758,8 @@ Expected: green — ruff, mypy --strict, and the full suite.
 
 ```bash
 export NIGHTSHIFT_WORKSPACE_ROOT=/tmp/nightshift
+export GITHUB_TOKEN=...            # a token on the fork org, repo scope
+export NIGHTSHIFT_FORK_ORG=...     # the org the forks live in
 make run-local REPO=<a fork in your org pinned to jinja2 2.11.3>
 ```
 

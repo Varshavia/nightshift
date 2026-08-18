@@ -25,7 +25,10 @@ scan:  ## Run one scan against the configured fleet
 
 run-local:  ## End to end on one repository: make run-local REPO=owner/name
 	@test -n "$(REPO)" || (echo "usage: make run-local REPO=owner/name" && exit 1)
-	$(PYTHON) scripts/run_local.py --repo "$(REPO)"
+	# Run as a module, not by path: `services` and `scripts` are only importable
+	# when the repository root is on sys.path, which -m provides and a bare path
+	# invocation does not.
+	$(PYTHON) -m scripts.run_local --repo "$(REPO)"
 
 deploy:  ## Deploy to GCP (idempotent)
 	./infra/deploy.sh

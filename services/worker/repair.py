@@ -70,8 +70,8 @@ def run_repair_loop(
     agent: RepairAgent,
     *,
     tools: SandboxTools | None = None,
-    run_suite: Callable[..., TestReport] = run_tests,
-    capture: Callable[[Sandbox], str] = capture_diff,
+    run_suite: Callable[..., TestReport] | None = None,
+    capture: Callable[[Sandbox], str] | None = None,
 ) -> bool:
     """Repair until the suite is green or a ceiling is reached. True when green.
 
@@ -79,6 +79,11 @@ def run_repair_loop(
     green suite means ``PATCHED_REPAIRED`` here and something else in a probe.
     """
     tools = tools or SandboxTools(sandbox=sandbox, policy=policy, budget=budget)
+    # Resolved here rather than as default arguments: a default binds the
+    # function object at definition time, so patching the module attribute in a
+    # test would never reach it and the suite would quietly run for real.
+    run_suite = run_suite or run_tests
+    capture = capture or capture_diff
     failing_output = failure.output
 
     while True:
