@@ -72,9 +72,8 @@ def open_pull_request(job: RepoJob, sandbox: Sandbox, policy: PolicyEngine) -> s
 def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> RepoJob:
     """Process one job to a terminal outcome. Checkpointed at every phase."""
     settings = settings or get_settings()
-    policy = PolicyEngine(settings=settings)
     budget = Budget()
-    workspace = Path("/workspace") / job.job_id.replace(":", "_").replace("/", "_")
+    workspace = Path(settings.workspace_root) / job.job_id.replace(":", "_").replace("/", "_")
 
     def checkpoint(phase: Phase) -> None:
         job.advance(phase)
@@ -91,6 +90,11 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
         repo_path = clone(job.repo, workspace, token=settings.github_token)
     except EnvironmentBuildError as exc:
         return finish(Outcome.INFRA_ERROR, notes=f"clone failed: {exc}"[:500])
+
+    # Built here, not before the clone: the engine judges paths against the real
+    # workspace, and until the clone lands there is no real workspace to judge
+    # against. Constructing it earlier made every local path look like an escape.
+    policy = PolicyEngine(settings=settings, workspace=repo_path.as_posix())
 
     checkpoint(Phase.BASELINE)
     try:

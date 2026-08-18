@@ -69,8 +69,15 @@ class Settings:
     gcp_region: str = "us-central1"
     jobs_topic: str = "nightshift-jobs"
     firestore_database: str = "(default)"
+    #: Where clones are built. ``/workspace`` in the container; a temp directory
+    #: locally, because a laptop has no ``/workspace`` and should not need one.
+    workspace_root: str = "/workspace"
 
-    gemini_model: str = "gemini-3.5-pro"
+    #: The repair agent. Flash by default — the hackathon brief names it, it is
+    #: markedly cheaper, and most breaks are a moved import rather than a puzzle.
+    repair_model: str = "gemini-3.5-flash"
+    #: Reached for once Flash has had its attempts. See ADR 0004.
+    escalation_model: str = "gemini-3.5-pro"
     triage_model: str = "gemma-3-27b-it"
     model_backend: str = "vertex"
 
@@ -88,7 +95,9 @@ class Settings:
             gcp_region=_env("NIGHTSHIFT_GCP_REGION", "us-central1"),
             jobs_topic=_env("NIGHTSHIFT_JOBS_TOPIC", "nightshift-jobs"),
             firestore_database=_env("NIGHTSHIFT_FIRESTORE_DATABASE", "(default)"),
-            gemini_model=_env("NIGHTSHIFT_GEMINI_MODEL", "gemini-3.5-pro"),
+            workspace_root=_env("NIGHTSHIFT_WORKSPACE_ROOT", "/workspace"),
+            repair_model=_env("NIGHTSHIFT_REPAIR_MODEL", "gemini-3.5-flash"),
+            escalation_model=_env("NIGHTSHIFT_ESCALATION_MODEL", "gemini-3.5-pro"),
             triage_model=_env("NIGHTSHIFT_TRIAGE_MODEL", "gemma-3-27b-it"),
             model_backend=_env("NIGHTSHIFT_MODEL_BACKEND", "vertex"),
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),
