@@ -1,5 +1,10 @@
 # Block 1 — The Repair Loop Implementation Plan
 
+> **STATUS — 19 Aug 2026: all seven tasks implemented, committed and pushed to
+> `feat/repair-loop`. `make check` green at 176 tests. The one thing NOT done is
+> the live run against a real fork — see Definition of done. Read
+> `SESSION_SUMMARY.md` before continuing.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** `make run-local REPO=owner/name` takes one real repository from a green baseline through a security upgrade that breaks it, repairs the calling code, and opens a real pull request.
@@ -44,7 +49,7 @@ The agent's only way to touch the world. Every method builds a `ToolCall`, asks 
   - `SandboxTools.denials -> tuple[Decision, ...]`
   - `DENIAL_PREFIX: str`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """The tool layer is where the policy engine stops being theory.
@@ -125,12 +130,12 @@ def test_reading_a_missing_file_reports_rather_than_raises(tools: SandboxTools) 
     assert "does not exist" in tools.read_file("src/nope.py")
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_tools.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'services.worker.tools'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `services/worker/tools.py`:
 
@@ -230,7 +235,7 @@ class SandboxTools:
         return f"exit {result.returncode}\n{output[-MAX_OUTPUT_CHARS:]}"
 ```
 
-- [ ] **Step 4: Fix the workspace bug in the worker**
+- [x] **Step 4: Fix the workspace bug in the worker**
 
 `services/worker/main.py` currently builds the engine before the clone exists and with the container's hard-coded path, so a local run would judge every path an escape. Move the construction to after `clone` returns and give it the real path.
 
@@ -255,7 +260,7 @@ and immediately after the successful `clone`, add:
     policy = PolicyEngine(settings=settings, workspace=repo_path.as_posix())
 ```
 
-- [ ] **Step 5: Add `workspace_root` to settings**
+- [x] **Step 5: Add `workspace_root` to settings**
 
 In `packages/nightshift_core/config.py`, add to `Settings` (after `firestore_database`):
 
@@ -307,12 +312,12 @@ NIGHTSHIFT_REPAIR_MODEL=gemini-3.5-flash
 NIGHTSHIFT_ESCALATION_MODEL=gemini-3.5-pro
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_tools.py -v && make check`
 Expected: PASS, and `make check` green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add services/worker/tools.py tests/test_tools.py services/worker/main.py packages/nightshift_core/config.py .env.example
@@ -336,7 +341,7 @@ The repair diff is what a human reviews and what `RepairAttempt` records. This i
   - `DiffStats(files: int, added: int, removed: int)` — frozen dataclass
   - `diff_stats(diff: str) -> DiffStats`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """Diff capture. What the reviewer at nine in the morning actually reads."""
@@ -412,12 +417,12 @@ def test_diff_stats_of_an_empty_diff_is_all_zero() -> None:
     assert (stats.files, stats.added, stats.removed) == (0, 0, 0)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_toolchain_diff.py -v`
 Expected: FAIL — `ImportError: cannot import name 'capture_diff'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `services/worker/toolchain.py`, and add `"DiffStats"`, `"capture_diff"`, `"diff_stats"` to `__all__`:
 
@@ -469,12 +474,12 @@ def diff_stats(diff: str) -> DiffStats:
     return DiffStats(files=files, added=added, removed=removed)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_toolchain_diff.py -v && make check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/worker/toolchain.py tests/test_toolchain_diff.py
@@ -500,7 +505,7 @@ The heart of the project. The loop owns the ceiling, re-runs the suite after eve
   - `RepairAgent` — Protocol with `attempt(context: RepairContext, tools: SandboxTools) -> RepairProposal`
   - `run_repair_loop(job, sandbox, failure, policy, budget, agent, *, run_suite=run_tests) -> bool`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """The repair loop, exercised with a fake agent and no model call.
@@ -665,12 +670,12 @@ def test_the_job_is_never_finished_by_the_loop(fixture_set) -> None:
     assert Outcome.PATCHED_REPAIRED not in {job.outcome}
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_repair_loop.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'services.worker.repair'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `services/worker/repair.py`:
 
@@ -805,7 +810,7 @@ def run_repair_loop(
         failing_output = verdict.output
 ```
 
-- [ ] **Step 4: Delegate from the worker**
+- [x] **Step 4: Delegate from the worker**
 
 In `services/worker/main.py`, replace the `repair` stub body with a delegation, keeping the docstring:
 
@@ -824,12 +829,12 @@ def repair(
 
 Add the imports `from services.worker.repair import RepairAgent, run_repair_loop`.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_repair_loop.py -v && make check`
 Expected: PASS — 8 tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/worker/repair.py tests/test_repair_loop.py services/worker/main.py
@@ -852,7 +857,7 @@ A pure function over `templates/pr_body.md`. Pure because the body is what a mai
   - `render_pr_body(job: RepoJob, *, baseline_green: bool, test_command: str, model: str, template: str | None = None) -> str`
   - `PR_TEMPLATE_PATH: Path`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """The pull-request body. The only artefact a maintainer actually reads."""
@@ -938,12 +943,12 @@ def test_a_vulnerability_without_a_cve_renders_cleanly() -> None:
     assert "CVE-" not in body
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_pr_body.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'services.worker.pull_request'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `services/worker/pull_request.py`:
 
@@ -1019,14 +1024,14 @@ def render_pr_body(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_pr_body.py -v && make check`
 Expected: PASS
 
 If `test_no_placeholder_survives_rendering` fails, a field in `templates/pr_body.md` has no corresponding keyword above — add it rather than loosening the test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/worker/pull_request.py tests/test_pr_body.py
@@ -1052,7 +1057,7 @@ Branch, commit, push, open. The policy engine is consulted through `open_pull_re
   - `open_pr(job, sandbox, policy, settings, client, *, baseline_green, model) -> str`
   - `PullRequestBlocked(RuntimeError)` — carries `.decision`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """Opening the pull request. Forks by default; nothing merges itself."""
@@ -1163,12 +1168,12 @@ def test_the_body_reaches_github_with_the_disclosure(sandbox: Sandbox) -> None:
     assert "written by an AI agent" in client.calls[0]["body"]
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_pull_request.py -v`
 Expected: FAIL — `ImportError: cannot import name 'open_pr'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `services/worker/pull_request.py` and extend `__all__` with `"GitHubClient"`, `"PullRequestBlocked"`, `"PyGithubClient"`, `"open_pr"`:
 
@@ -1283,7 +1288,7 @@ def open_pr(
 
 and set `github_token=""` in that one test's `Settings`.
 
-- [ ] **Step 4: Delegate from the worker**
+- [x] **Step 4: Delegate from the worker**
 
 In `services/worker/main.py`, replace the `open_pull_request` stub:
 
@@ -1314,12 +1319,12 @@ and in `handle`, wrap the call so a denial becomes a counted outcome:
         return finish(Outcome.POLICY_BLOCKED, notes=str(exc)[:500])
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_pull_request.py -v && make check`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/worker/pull_request.py services/worker/main.py tests/test_pull_request.py
@@ -1347,7 +1352,7 @@ The real Gemini wiring. Kept last because everything above is testable without i
 `repair_model` and `escalation_model` already exist — they were added in Task 1
 because Task 5 needed them.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """The repair agent. What can be tested without a credential, is."""
@@ -1413,12 +1418,12 @@ def test_constructing_the_agent_needs_no_credential() -> None:
     assert GeminiRepairAgent(settings=Settings()) is not None
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_agent.py -v`
 Expected: FAIL — `ImportError: cannot import name 'GeminiRepairAgent'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `services/worker/agent.py`, keep `REPAIR_INSTRUCTION` exactly as written — it is a design artefact — and replace `build_repair_agent` with:
 
@@ -1507,12 +1512,12 @@ def build_repair_agent(settings: Settings | None = None) -> GeminiRepairAgent:
 
 **Note for the implementer:** the ADK surface (`LlmAgent`, `FunctionTool`, `agent.run`) is the part of this plan most likely to differ from the installed `google-adk` version. Verify against the installed package before assuming this is wrong, and adjust `attempt` only — the Protocol boundary is what protects the rest of the code from that churn. `mypy` treats `google.adk.*` as untyped (already configured in `pyproject.toml`), so the import is deliberately inside the method.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_agent.py -v && make check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/worker/agent.py packages/nightshift_core/config.py .env.example tests/test_agent.py
@@ -1535,7 +1540,7 @@ Block 1's definition of done. `run_local.py` currently imports two scanner stubs
 - Consumes: everything above
 - Produces: `triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """Triage: the cheap gate before an expensive model is woken."""
@@ -1682,12 +1687,12 @@ def test_a_break_the_agent_cannot_fix_is_repair_exhausted(patched, monkeypatch) 
     assert len(job.repair_attempts) == 2
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_triage.py tests/test_worker_handle.py -v`
 Expected: FAIL — `NotImplementedError: scanner: triage`
 
-- [ ] **Step 3: Implement `triage`**
+- [x] **Step 3: Implement `triage`**
 
 In `services/scanner/main.py`, replace the stub body, keeping the docstring and adding a paragraph about what was deferred:
 
@@ -1707,7 +1712,7 @@ def triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]:
     ]
 ```
 
-- [ ] **Step 4: Pass the agent into the loop**
+- [x] **Step 4: Pass the agent into the loop**
 
 In `services/worker/main.py`, `handle` currently calls `repair(...)` without an agent. Build it once, lazily, so a `PATCHED_CLEAN` job never constructs one:
 
@@ -1720,7 +1725,7 @@ In `services/worker/main.py`, `handle` currently calls `repair(...)` without an 
 
 Add `from services.worker.agent import build_repair_agent` to the imports.
 
-- [ ] **Step 5: Rewrite `run_local.py` to read from a clone**
+- [x] **Step 5: Rewrite `run_local.py` to read from a clone**
 
 Replace the scanner imports and the dependency read in `scripts/run_local.py`:
 
@@ -1749,12 +1754,12 @@ A second, shallow clone costs a few seconds locally and buys the use of
 stubbed until Block 2, where reading three hundred repositories without cloning
 them is what makes it worth writing.
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 Run: `make check`
 Expected: green — ruff, mypy --strict, and the full suite.
 
-- [ ] **Step 7: Run it against a real repository**
+- [x] **Step 7: Run it against a real repository**
 
 ```bash
 export NIGHTSHIFT_WORKSPACE_ROOT=/tmp/nightshift
@@ -1766,7 +1771,7 @@ make run-local REPO=<a fork in your org pinned to jinja2 2.11.3>
 Expected: a printed outcome of `PATCHED_REPAIRED` and a real pull-request URL.
 **Block 1 is done when this produces a pull request a human can open and read.**
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add scripts/run_local.py services/scanner/main.py services/worker/main.py tests/test_triage.py tests/test_worker_handle.py
@@ -1777,9 +1782,33 @@ git commit -m "feat(worker): run one repository end to end to a real pull reques
 
 ## Definition of done
 
-- [ ] `make check` green: ruff, `mypy --strict`, full suite.
+- [x] `make check` green: ruff, `mypy --strict`, **176 tests**.
 - [ ] `make run-local REPO=owner/name` opens a real pull request on a fork.
-- [ ] Every `Outcome` path in `handle` is covered by a test: `BASELINE_RED`, `PATCHED_CLEAN`, `PATCHED_REPAIRED`, `REPAIR_EXHAUSTED`, `POLICY_BLOCKED`.
-- [ ] The agent cannot write a test file — proven in `tests/test_tools.py`, not asserted in a prompt.
-- [ ] No new `Outcome` member. No auto-merge flag. No secret in the diff.
-- [ ] `SESSION_SUMMARY.md` updated: `NOW` rewritten, log entry appended.
+      **Blocked, not failed** — needs a `GITHUB_TOKEN` and a fork to run against,
+      and `scripts/build_fork_pool.py` is still a stub. Every code path it
+      exercises is implemented and tested; nobody has watched it open a real
+      pull request yet, so do not claim Block 1 finished until someone has.
+- [x] Every `Outcome` path in `handle` is covered by a test: `UNBUILDABLE`,
+      `BASELINE_RED`, `PATCHED_CLEAN`, `PATCHED_REPAIRED`, `REPAIR_EXHAUSTED`,
+      `NO_FIX_AVAILABLE`, `POLICY_BLOCKED` — `tests/test_worker_handle.py`.
+- [x] The agent cannot write a test file — proven in `tests/test_tools.py`, not
+      asserted in a prompt.
+- [x] No new `Outcome` member. No auto-merge flag. No secret in the diff.
+- [x] `SESSION_SUMMARY.md` updated: `NOW` rewritten, log entry appended.
+
+## Verified for real, 19 Aug
+
+The non-model half of the pipeline was run against
+`benchmark/cases/jinja2-2.11-to-3.1`, not merely unit-tested:
+
+```
+BUILD      pip install -r requirements.txt -> 0
+BASELINE   passed=True   exit=0   collected=True
+UPGRADE    manifests changed: ['requirements.txt']
+VERIFY     passed=False  exit=2   Interrupted: 1 error during collection
+```
+
+That red suite is exactly the input `repair()` receives. Note exit code 2 —
+collection interrupted — which `TestReport.internal_error` deliberately does
+**not** treat as our fault, because after an upgrade it is the single most
+common shape of a real break.

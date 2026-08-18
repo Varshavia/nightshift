@@ -34,39 +34,124 @@ true?", and a status block alone loses the reasoning.
 
 | | |
 |---|---|
-| **Branch** | `feat/repair-loop`, branched from `docs/migration-ledger`. Neither is pushed. `main` is at 14 commits. |
-| **Green** | Core domain, policy engine, OSV client, config/stores, manifest parsing, worker toolchain (clone · build · test · upgrade), zero-token fleet probe, benchmark Tier A case #1. |
-| **Direction** | **The Migration Ledger — approved.** Spec: `docs/superpowers/specs/2026-08-19-migration-ledger-design.md`. ADR 0004. Four agents: Triage, Repair, Librarian, Reviewer. |
-| **Block 1 progress** | **Task 1 of 7 done** — `services/worker/tools.py`, the policy-gated tool layer, 8 tests. Also fixed a latent bug: the policy engine was built before the clone existed and against a hard-coded `/workspace`, so every local path read as a sandbox escape. |
-| **Next action** | **Task 2** — diff capture in `toolchain.py`. Then 3 (repair loop), 4 (PR body), 5 (open PR), 6 (ADK agent), 7 (end to end). Plan: `docs/superpowers/plans/2026-08-19-block-1-repair-loop.md`. |
-| **Not built** | The repair loop (Block 1). The Ledger (Block 2). Registry, identities, Model Armor, Reviewer (Block 3). Scanner's `load_fleet` / `read_manifests` / `publish`. API approvals. Fork-pool scripts. `dashboard/`. |
+| **Branch** | `feat/repair-loop`, **pushed**. Branched off `docs/migration-ledger`, which is also pushed. **No PRs opened yet** — deliberate. `main` still at 14 commits. |
+| **Check** | **Green. 176 tests**, ruff clean, `mypy --strict` clean over 39 files. Run it with `.venv/bin/python -m pytest`. |
+| **Block 1** | **All 7 tasks implemented, committed, pushed.** Repair loop, policy-gated tools, diff capture, PR body, PR opening, ADK agent, triage, end-to-end wiring. |
+| **Block 1 remaining** | **The live run.** Nobody has watched `make run-local` open a real pull request. It needs a `GITHUB_TOKEN` and a fork to point at, and `scripts/build_fork_pool.py` is still a stub. **Do not call Block 1 finished until a human has seen the PR.** |
+| **Next action** | Either (a) build a small fork pool and do the live run, closing Block 1 honestly, or (b) start Block 2 — the Ledger. (a) first if you have a GitHub token; the whole design rests on the loop working in the wild. |
 
-**Cut line: 27 August.** If Block 2 is not working by then, ship Block 1 plus
-governance, drop the curve to a smaller N, and report it as measured. See §8 of
-the spec.
+**Cut line: 27 August.** If Block 2's Ledger is not working by then, ship what
+exists plus governance and report a smaller curve as measured. See §8 of the
+spec.
 
-**Resolved 19 Aug — `make check` is green.** `.venv` created with
-`python3 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"`.
-**113 tests pass**, ruff clean, `mypy --strict` clean across 28 source files.
-The old "88 tests" figure was stale, not wrong-in-kind: 80 test *functions*
-expand to 113 test *cases* through parametrization. Quote **113 tests** from
-here on, and re-run before quoting it to a judge.
+### How to pick this up cold
 
-**Local dev note:** the repo needs `.venv` (gitignored). The system `python3`
-on this machine is 3.11.3 with no pytest — running `pytest` outside the venv
-fails confusingly. Use `.venv/bin/python -m pytest`, or activate first.
+```bash
+python3 -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -m pytest          # expect 176 passed
+```
 
-**Task 6 risk, checked 19 Aug:** `google-adk` resolves — 2.7.1 is current and
-the `>=2.0` pin in `services/worker/requirements.txt` is satisfiable. The
-*dependency* is fine; the `LlmAgent` / `FunctionTool` / `run` **API surface** in
-the plan is still written from documentation rather than from the installed
-package. Verify it when Task 6 starts, and change only
-`GeminiRepairAgent.attempt` — the `RepairAgent` Protocol exists to keep that
-churn out of everything else.
+Read in this order: this file → `CLAUDE.md` → the spec
+(`docs/superpowers/specs/2026-08-19-migration-ledger-design.md`) → the plan
+(`docs/superpowers/plans/2026-08-19-block-1-repair-loop.md`, which now carries a
+STATUS banner and ticked checkboxes showing exactly what landed).
+
+**Local dev notes**
+- The system `python3` here is 3.11.3 with no pytest. Always use `.venv/bin/python`.
+- `make run-local` needs `NIGHTSHIFT_WORKSPACE_ROOT` set to something writable
+  (`/tmp/nightshift`), plus `GITHUB_TOKEN` and `NIGHTSHIFT_FORK_ORG`.
+- `google-adk` is now in the `dev` extra, not just the worker requirements — the
+  suite asserts the agent is built with exactly the three policy-gated tools,
+  and that assertion is worthless if CI cannot import the package and skips it.
+
+### What Block 1 actually built
+
+| File | What it is |
+|---|---|
+| `services/worker/tools.py` | The agent's only hands. Every action becomes a `ToolCall` the policy engine rules on; denials come back as readable text, not exceptions. |
+| `services/worker/repair.py` | The bounded loop. The **suite** decides success, never the agent. Reaches the agent through a `RepairAgent` Protocol so it tests with no token spent. |
+| `services/worker/agent.py` | `GeminiRepairAgent`, real ADK. Flash for attempts 1–2, Pro after. |
+| `services/worker/pull_request.py` | Body rendering (pure) and `open_pr`. Policy checked **before** branching. |
+| `services/worker/toolchain.py` | Gained `capture_diff` / `diff_stats`. |
+| `services/scanner/main.py` | `triage` — severity floor only; the Gemma pass is Block 3. |
 
 ---
 
 ## Log
+
+### 2026-08-19 · Etka · Block 1 implemented end to end, all 7 tasks pushed
+
+**Did:** Executed the whole Block 1 plan, TDD, one commit per task, pushed to
+`feat/repair-loop`. 113 → **176 tests**.
+
+**Verified for real, not just unit-tested.** Ran the non-model pipeline against
+`benchmark/cases/jinja2-2.11-to-3.1`:
+
+```
+BUILD      pip install -r requirements.txt -> 0
+BASELINE   passed=True   exit=0   collected=True
+UPGRADE    manifests changed: ['requirements.txt']
+VERIFY     passed=False  exit=2   Interrupted: 1 error during collection
+```
+
+That red suite is exactly what `repair()` is handed. Everything up to the model
+call now works on a real case.
+
+**Five bugs found while building. Each cost real time; none is obvious:**
+
+1. **Default arguments bind at definition time.** `run_repair_loop` took
+   `run_suite=run_tests` as a default, so monkeypatching
+   `services.worker.repair.run_tests` never reached it and the tests would have
+   silently run the real pytest against an empty directory. Both `run_suite` and
+   `capture` are now resolved inside the function. **If you add another injected
+   default anywhere, do the same.**
+2. **An empty `MemoryJobStore` is falsy** — it defines `__len__`. A
+   `store or MemoryJobStore()` helper silently swapped in a fresh store and lost
+   every checkpoint under test. Use `x if x is not None else y` for anything
+   with `__len__`.
+3. **The ceiling was off by one.** `Budget.attempts` counts *completed*
+   attempts and the engine denies when that count *exceeds* the ceiling, so
+   checking the live budget let a fourth attempt run under a ceiling of three.
+   The loop now asks about the attempt it is *about to* make.
+4. **The policy engine was built before the clone existed**, against a
+   hard-coded `/workspace`. On any local run every path read as a sandbox
+   escape. It is now constructed after `clone` returns, with the real path.
+5. **`make run-local` could never have worked** — running the script by path
+   leaves `services` unimportable. The Makefile now uses `-m scripts.run_local`.
+
+**The plan was written from ADK documentation and the docs were wrong about the
+invocation.** Installed `google-adk` 2.7.1 and checked: agents run through a
+`Runner` with an explicit session, not `agent.run(prompt)`. `create_session_sync`
+exists but is deprecated, so we use the async one via `asyncio.run`.
+`FunctionTool` must be imported from `google.adk.tools.function_tool` because the
+package builds its `__all__` lazily and no static checker can see it otherwise.
+`LlmAgent(name=, model=, instruction=, tools=)` was correct as written.
+
+**Also corrected in the plan itself** (so the document stays trustworthy): a
+miscounted `diff_stats` expectation — that fixture has 2 added lines, not 3.
+
+**State:** `make check` green — 176 tests, ruff clean, mypy --strict clean.
+Everything pushed. No PRs opened, as asked.
+
+**Next:** Either do the live run and close Block 1 honestly, or start Block 2.
+The Ledger's first piece is `packages/nightshift_core/ledger.py` — three-tier
+retrieval against Memory Bank, scoped `{library, from_version, to_version}`, with
+Firestore holding confirmation counts. Spec §4. Write the Block 2 plan first;
+do not improvise it.
+
+**Watch out:**
+- **Block 1 is not done.** Everything is implemented and tested, but no human
+  has watched it open a pull request. Resist writing "Block 1 complete" anywhere
+  a judge reads until that has happened.
+- The repair agent's `attempt()` is the one method no test exercises — it needs
+  a real model. The seams either side of it (`render_attempt_prompt`,
+  `final_text`, `total_tokens`) are pure and covered, so when the live run
+  misbehaves, suspect `attempt()` first.
+- `services/worker/main.py` and `services/worker/repair.py` each import
+  `run_tests` into their own namespace. Patch **both** — `tests/test_worker_handle.py`
+  has a `patch_suite` helper that does it.
+
+---
 
 ### 2026-08-19 · Etka · Ledger design approved; Block 1 plan written; docs updated
 
