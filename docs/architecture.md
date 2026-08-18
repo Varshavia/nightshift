@@ -33,7 +33,10 @@ Cloud Scheduler ──▶ Scanner (Cloud Run Job)          ~1 minute, whole flee
                       ├─ BASELINE   run the suite untouched
                       ├─ UPGRADE    rewrite manifest, reinstall
                       ├─ VERIFY     run the suite again
+                      ├─ LEDGER     has this transition been solved before?
                       ├─ REPAIR     bounded Gemini loop  ◀── the product
+                      ├─ LIBRARIAN  generalise the fix into a recipe
+                      ├─ REVIEW     second opinion on the diff
                       └─ PR         open it, disclose authorship, stop
 ```
 
@@ -104,6 +107,51 @@ it remembers about the API. Recollection of a library's interface at a specific
 version is exactly the kind of thing a model is confidently wrong about, and the
 ground truth is sitting in `site-packages`.
 
+## The Migration Ledger
+
+The repair loop above is linear in fleet size: three hundred repositories, three hundred
+independent repairs, three hundred times the tokens. That is the wrong shape, because
+vulnerable pins cluster. A handful of transitions — `jinja2 2.11→3.x`, `requests
+2.25→2.32`, `urllib3 1.26→2.x`, `pyyaml 5.3→6.0` — dominate any real fleet. Solving the
+same migration forty times is spending the credit on work already done.
+
+So the fleet remembers. A **Librarian** agent reads each finished repair and writes back a
+generalised rule, scoped in Vertex AI Memory Bank by `{library, from_version, to_version}`:
+
+```
+scope   {library: jinja2, from_version: 2.11.3, to_version: 3.1.2}
+fact    Jinja2 3.0 removed the top-level Markup and escape re-exports.
+        Import them from markupsafe instead.
+topics  [verified, removed-top-level-name, PyPI]
+```
+
+Retrieval has three tiers, and which one fired is recorded on every job as `ledger.hit`:
+
+| Tier | When | Cost |
+|---|---|---|
+| **exact** | the scope matches a known transition | one attempt, a few thousand tokens |
+| **near** | similarity search finds an adjacent transition of the same library | fewer attempts, offered as lower-confidence |
+| **miss** | nobody has seen this transition | full price, and it teaches the Ledger |
+
+Two stores, deliberately. Memory Bank is the agent's recall surface — text, semantically
+searchable, scoped. Firestore at `ledger/{library}:{from}:{to}` is the ledger of record —
+confirmation counts, provenance, the audit trail. Incrementing a counter by rewriting a
+memory's text would be the wrong shape, and Memory Bank is not a relational store.
+
+**Why this cannot lie.** A recipe is offered to the repair agent as prior art, never as an
+instruction, and the success criterion is untouched: the repository's own suite passes and
+the tests were not modified. The worst a wrong recipe can do is waste attempts. Recipes
+start `provisional` and become `verified` only after two independent confirmations —
+two repositories, neither the originator, where the recipe was retrieved and the repair
+then succeeded.
+
+**Why the Librarian is a separate agent.** It writes to the Ledger and can never reach a
+repository; the repair agent reads the Ledger and can never write to it. That is enforced
+with IAM Conditions on `aiplatform.googleapis.com/memoryScope`, not with a prompt. An agent
+that cannot write to the Ledger cannot poison it.
+
+Full reasoning and the alternatives rejected: [ADR 0004](decisions/0004-the-migration-ledger.md).
+
 ## The policy engine
 
 Every tool call the agent makes passes through
@@ -125,6 +173,20 @@ It guarantees four things:
 Every decision is recorded with the rule that produced it. That audit trail is
 what a reviewer reads to see that a refusal was designed rather than accidental.
 
+### Model Armor sits in front of it, not instead of it
+
+The repair agent reads repository file contents, docstrings, READMEs and test output. All
+of it is attacker-controllable text going into a model that holds write access to a
+sandbox. That is a real injection surface, not a hypothetical one, so untrusted content
+passes a Model Armor template before it enters a prompt.
+
+The two layers guard different failure modes and neither substitutes for the other:
+
+| | Inspects | Says |
+|---|---|---|
+| **Model Armor** | content, on the way in | "this docstring is trying to persuade you" |
+| **Policy engine** | actions, on the way out | "you may not write to a test file, whatever you were persuaded of" |
+
 ## State
 
 Firestore holds one document per `RepoJob`, written at every phase transition. A
@@ -141,8 +203,12 @@ did the agent fix?
 
 | Requirement | Ours | Why this and not something else |
 |---|---|---|
-| Gemini 3.5+ | Repair agent | Long-context reasoning over a traceback plus library source is the whole task |
+| Gemini 3.5+ | Repair, Librarian, Reviewer | Long-context reasoning over a traceback plus library source is the whole task. Flash carries most breaks; Pro is reached for after two failed attempts |
 | Google agent framework | ADK 2.0 | Tool wrapping and Memory Bank; the memory is what makes fleet scale pay off |
+| Memory Bank | The Migration Ledger | Exact-scope retrieval on `{library, from→to}` is precisely the key this problem has |
+| Agent Registry | Agent versioning | A benchmark number is meaningless unless it can be attributed to one agent version |
+| Model Armor | Untrusted-input screening | Repository content is attacker-controllable by construction |
+| Cloud Trace / OTel | Observability | The cost curve is a query over span attributes, not an illustration of one |
 | Google Cloud service | Cloud Run Jobs, Pub/Sub, Cloud Scheduler, Firestore | Fan-out with per-job isolation and no idle cost between nights |
 | Bonus model | Gemma triage | Cheap judgement on advisory noise before Gemini is woken |
 
@@ -159,3 +225,6 @@ cost per repository is measured and displayed rather than estimated.
 - [ADR 0001 — Python and PyPI only](decisions/0001-python-pypi-only.md)
 - [ADR 0002 — Forks by default](decisions/0002-forks-by-default.md)
 - [ADR 0003 — Outcome is a closed enum](decisions/0003-closed-outcome-enum.md)
+- [ADR 0004 — Repairs accumulate into a Migration Ledger](decisions/0004-the-migration-ledger.md)
+
+Design specs and implementation plans live in [`superpowers/`](superpowers/).

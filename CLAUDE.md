@@ -1,7 +1,32 @@
 # Nightshift — working context
 
 Read this before doing anything in this repository. It is the durable memory of the
-project: what it is, what must not drift, and where the work currently stands.
+project: what it is and what must not drift.
+
+---
+
+## 0. Before anything else
+
+**Read `SESSION_SUMMARY.md` first — every session, before reading the rest of this
+file and before touching any code.**
+
+This file is the durable *design* of Nightshift. `SESSION_SUMMARY.md` is the
+durable *state* of it. They answer different questions and neither substitutes
+for the other: this file tells you what the project is meant to be, that file
+tells you what is actually true this morning.
+
+Two people build this repository at different hours, and neither sees the other's
+session. That file is the entire handoff — read its `NOW` block to learn what is
+true today, then skim the log for what changed since you were last here.
+
+**Before you finish a session, append a log entry and rewrite `NOW` in place.**
+This applies to agents as much as to humans: a session that ends without it has
+silently broken the other developer's next session, and they will not find out
+until they have already acted on stale information.
+
+Where the two files disagree, `SESSION_SUMMARY.md` wins on matters of state and
+this file wins on matters of design — and the disagreement itself is a bug in
+whichever file is stale. Fix it in the same session you noticed it.
 
 ---
 
@@ -16,6 +41,12 @@ PR and walk away. A large share of those PRs fail CI because the patched version
 API, and a human has to read the traceback and rewrite the calling code. That human step is
 the bottleneck, and it is what this project automates. If a change makes the upgrade
 mechanism better but the repair loop weaker, it is the wrong change.
+
+**The second insight, added 19 Aug (ADR 0004):** vulnerable pins cluster hard. A handful
+of transitions dominate any few hundred Python repositories. So every successful repair is
+generalised into a **migration recipe** and kept in a **Migration Ledger**, and the fortieth
+repository to hit `jinja2 2.11→3.1` starts from the answer instead of the traceback. Cost
+per repository falls as the fleet works. That curve is the headline number.
 
 Elevator pitch (Devpost, ≤200 chars):
 
@@ -66,31 +97,64 @@ explicitly and wait.
   not errors. This is what makes the repair rate a meaningful number rather than a claim.
 - **No secret is ever committed.** Everything credential-shaped is read from the
   environment. New variables go into `.env.example` with a comment and no value.
+- **A recipe is a hint, never an instruction.** The Ledger informs the repair agent; it
+  never overrides the success criterion. The suite passes and the tests were not modified,
+  or the repair did not happen. A wrong recipe costs attempts; it cannot produce a false
+  green. See ADR 0004.
+- **Only the Librarian writes to the Ledger**, and it can never reach a repository. This is
+  IAM, not prompt discipline — an agent that cannot write to the Ledger cannot poison it.
 
 ## 4. Architecture
 
 Nightly: Cloud Scheduler → scanner reads manifests → one batched OSV.dev query → Gemma
 triage → one Pub/Sub message per affected repository → Cloud Run Job workers fan out.
 
-Inside a worker: baseline (tests untouched) → upgrade → verify → **repair loop** → PR.
-Every tool call passes through the policy engine before execution. State and checkpoints in
-Firestore; repair knowledge accumulates in ADK Memory Bank keyed by library and version
-transition.
+Inside a worker: baseline (tests untouched) → upgrade → verify → **Ledger lookup** →
+**repair loop** → Reviewer → PR. Every tool call passes through the policy engine before
+execution. State and checkpoints in Firestore.
+
+**Four agents, each with a genuinely different job** — this is what makes the Registry real
+rather than decorative:
+
+| Agent | Model | Job |
+|---|---|---|
+| Triage | Gemma 3 | Is this advisory worth waking a worker for? |
+| Repair | Gemini 3.5 Flash → Pro | Read the traceback, rewrite the call site. |
+| Librarian | Gemini 3.5 Pro | Generalise a finished repair into a recipe. Promote it. |
+| Reviewer | Gemini 3.5 Flash | Second opinion on the diff before the PR opens. |
+
+**The Migration Ledger.** Recipes live in Vertex AI Memory Bank scoped by
+`{library, from_version, to_version}` — an exact-match key. Retrieval is three-tier: exact
+hit, near hit (similarity search over adjacent transitions of the same library), or miss.
+Evidence and confirmation counts live in Firestore at `ledger/{library}:{from}:{to}`.
+Memory Bank is the recall surface; Firestore is the ledger of record. See ADR 0004.
+
+**Two guard layers, different failure modes.** Model Armor inspects *content* on the way in
+("this docstring is trying to persuade you"); the policy engine inspects *actions* on the
+way out ("you may not write to a test file, whatever you were persuaded of"). Neither
+replaces the other.
+
+**Telemetry is the metric, not a picture of it.** OpenTelemetry spans carry `ledger.hit`,
+`agent.version`, `policy.rule` and tokens to Cloud Trace, and the cost curve is a query
+over those attributes.
 
 Full write-up: `docs/architecture.md`. Diagram source: `docs/architecture.mmd`.
-Decisions and their trade-offs: `docs/decisions/`.
+Decisions and their trade-offs: `docs/decisions/`. The Ledger design in full:
+`docs/superpowers/specs/2026-08-19-migration-ledger-design.md`.
 
 ## 5. Repo map
 
 ```
-packages/nightshift_core/   models · osv · policy · config · store   (shared domain)
+packages/nightshift_core/   models · osv · policy · config · store · ledger · telemetry
 services/scanner/           nightly scan, publishes jobs, then exits
-services/worker/            per-repo agent: baseline → upgrade → repair → PR
+services/worker/            per-repo agents: toolchain · tools · repair · agent · pull_request
 services/api/               read model + approvals for the dashboard
 dashboard/                  fleet control tower (Next.js) — not a chat UI
-scripts/                    fork pool construction and vetting
+scripts/                    fork pool construction, vetting, and the zero-token probe
+benchmark/                  two-tier method: authored cases (A) and discovered ones (B)
 infra/deploy.sh             idempotent GCP deployment, least-privilege service accounts
 templates/pr_body.md        PR body, includes mandatory AI-authorship disclosure
+docs/superpowers/           design specs and implementation plans
 ```
 
 ## 6. Conventions
@@ -126,43 +190,41 @@ rather than merely mislabelling it.
 
 ## 7. Current state
 
-Implemented and working — `make check` is green (ruff · mypy --strict · 88 tests):
+**Not recorded here.** State lives in `SESSION_SUMMARY.md` — its `NOW` block, kept current
+by whoever worked last. This file describes what the project *is*; duplicating what it
+*currently is* in two places guarantees the two disagree within a week.
 
-- `packages/nightshift_core/models.py` — closed outcome/phase enums, job aggregate
-- `packages/nightshift_core/osv.py` — OSV.dev batch client (no key, no rate limit)
-- `packages/nightshift_core/policy.py` — policy engine, 44 tests, the most tested module
-- `packages/nightshift_core/{config,store}.py` — settings, memory + Firestore stores
-- `infra/deploy.sh`, Dockerfiles, CI (ruff · mypy · pytest · gitleaks)
-- `docs/` — architecture, rendered diagram, three ADRs
-- `templates/pr_body.md`, `RESPONSIBLE_USE.md`, `README.md`
+What belongs here instead is the shape that does not change session to session:
 
-Deliberately stubbed, raising `NotImplementedError`. A stub returning an empty
-result would make a broken scan look like a quiet night, so none of them does:
-
-- `services/scanner/main.py` — fleet loading, manifest reading, triage, publish
-  (the OSV query and the job-assembly flow around them are real)
-- `services/worker/main.py` — clone, environment build, test runner, upgrade,
-  repair loop, PR (the phase machine and every outcome path around them are real)
-- `services/worker/agent.py` — the ADK agent itself; the instruction prompt is
-  written in full and is a design artefact, not a placeholder
-- `services/api/main.py` — approvals and the FastAPI app; the read model is real
-- `scripts/{build_fork_pool,vet_fork_pool,run_local}.py`
-- `dashboard/` — not scaffolded yet
+- The domain is deliberately free of infrastructure. `packages/nightshift_core` imports no
+  Google Cloud client at module load, which is why the suite runs on a laptop with no
+  credentials and why CI can prove it on every push.
+- Stubs raise `NotImplementedError` and never return an empty result. A stub that returned
+  `[]` would make a broken scan look like a quiet night — the failure mode this project is
+  least willing to have.
+- `packages/nightshift_core/policy.py` is the most heavily tested module and stays that
+  way. A bug there lets an autonomous process do real work nobody asked for.
 
 ## 8. Work blocks
 
 Not a day-by-day schedule. Each block is done when its condition is met, then the next
 starts.
 
-**Block 1 — thin slice.** One repository, manually triggered, one agent, end to end,
-producing a real PR. `make run-local REPO=owner/name` actually works. Dashboard skeleton
-reads live from Firestore.
+**Block 1 — the repair loop.** One repository, manually triggered, end to end, producing a
+real PR. `make run-local REPO=owner/name` actually works. Nothing else in the design matters
+until this does. Plan: `docs/superpowers/plans/2026-08-19-block-1-repair-loop.md`.
 
-**Block 2 — fleet.** Ten repositories, real queue, real parallelism. **The repair loop
-works.** Policy layer and approval queue in place.
+**Block 2 — the Ledger.** The Librarian writes recipes, the three-tier read path uses them,
+OTel spans carry `ledger.hit`. Ten repositories, real queue, real parallelism. The cost
+curve becomes measurable.
 
-**Block 3 — scale.** ~300 repositories forked and vetted, nightly runs producing real
-accumulating data. Cost measured per repository and displayed.
+**Block 3 — governance and scale.** Agent Registry, four identities with IAM Conditions on
+`memoryScope`, Model Armor on the untrusted-input path, the Reviewer. ~300 repositories
+forked and vetted; cost per repository measured and displayed.
+
+**The cut line is 27 August.** If Block 2 is not working by then, ship Block 1 plus
+governance, drop the curve to a smaller N, and report it as measured. A smaller honest
+curve beats a larger staged one.
 
 **Block 4 — showcase.** Code frozen. Four-minute video recorded, README verified from a
 clean checkout, architecture diagram current, write-up and social post published, Devpost
