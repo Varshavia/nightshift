@@ -41,6 +41,7 @@ from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import JobStore
 from services.worker.agent import build_repair_agent
+from services.worker.librarian import Librarian, shelve_repair
 from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
@@ -158,6 +159,7 @@ def handle(
     store: JobStore,
     settings: Settings | None = None,
     ledger: MigrationLedger | None = None,
+    librarian: Librarian | None = None,
 ) -> RepoJob:
     """Process one job to a terminal outcome. Checkpointed at every phase.
 
@@ -176,7 +178,7 @@ def handle(
     with telemetry.span(
         "job", **{telemetry.JOB_ID: job.job_id, telemetry.REPO: job.repo}
     ) as trace:
-        result = _run(job, store, settings, ledger, budget, workspace)
+        result = _run(job, store, settings, ledger, budget, workspace, librarian)
         trace[telemetry.LEDGER_HIT] = result.ledger_hit
         trace[telemetry.TOKENS] = result.tokens_used
         trace[telemetry.ATTEMPT] = len(result.repair_attempts)
@@ -191,6 +193,7 @@ def _run(
     ledger: MigrationLedger,
     budget: Budget,
     workspace: Path,
+    librarian: Librarian | None,
 ) -> RepoJob:
     def checkpoint(phase: Phase) -> None:
         job.advance(phase)
@@ -292,6 +295,15 @@ def _run(
     # Recorded after the pull request exists, not after the suite went green: a
     # repair nobody can review is not evidence that the recipe worked.
     record_in_ledger(job, ledger, retrieval, outcome)
+
+    # Only a repair teaches anything, and only if there is a Librarian to ask.
+    # Passed in rather than constructed here so that a fleet running without
+    # model access for the write path still repairs — it simply stops learning,
+    # which is a degradation and not a failure.
+    if librarian is not None and repaired:
+        for scope in scopes_from_job(job.actionable_vulnerabilities):
+            shelve_repair(job, scope, ledger, librarian)
+
     return finish(outcome, pr_url=pr_url)
 
 

@@ -291,3 +291,75 @@ def test_the_job_span_carries_what_the_curve_is_computed_from(
     assert attributes[LEDGER_HIT] == "exact"
     assert attributes[OUTCOME] == "PATCHED_REPAIRED"
     assert attributes[telemetry.TOKENS] == 100
+
+
+# --------------------------------------------------------------------------- #
+# The write path: a repair teaches the fleet
+# --------------------------------------------------------------------------- #
+
+
+class ScriptedLibrarian:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.prompts: list[str] = []
+
+    def consider(self, prompt: str) -> object:
+        from services.worker.librarian import parse_verdict
+
+        self.prompts.append(prompt)
+        return parse_verdict(self.text)
+
+
+GENERALISED = (
+    "GENERALISABLE: yes\nBREAK: removed-top-level-name\n"
+    "RULE: Jinja2 3.0 removed the top-level Markup re-export; import it from markupsafe."
+)
+
+
+def test_a_cold_repair_teaches_the_fleet(patched: pytest.MonkeyPatch) -> None:
+    """The miss that pays full price is also the one that writes the recipe."""
+    ledger = fresh_ledger()
+    _suite([True, False, True], patched)
+    _agent(patched, RecordingAgent())
+
+    job = worker.handle(
+        make_job("org/first"),
+        MemoryJobStore(),
+        SETTINGS,
+        ledger=ledger,
+        librarian=ScriptedLibrarian(GENERALISED),  # type: ignore[arg-type]
+    )
+
+    assert job.ledger_hit == "miss"
+    recipe = ledger.lookup(JINJA).recipe
+    assert recipe is not None
+    assert recipe.origin_repo == "org/first"
+    assert recipe.status is RecipeStatus.PROVISIONAL
+
+
+def test_a_clean_upgrade_teaches_nothing(patched: pytest.MonkeyPatch) -> None:
+    """Nothing broke, so there is no repair to generalise from."""
+    ledger = fresh_ledger()
+    _suite([True, True], patched)
+
+    worker.handle(
+        make_job(),
+        MemoryJobStore(),
+        SETTINGS,
+        ledger=ledger,
+        librarian=ScriptedLibrarian(GENERALISED),  # type: ignore[arg-type]
+    )
+
+    assert ledger.lookup(JINJA).recipe is None
+
+
+def test_a_fleet_with_no_librarian_still_repairs(patched: pytest.MonkeyPatch) -> None:
+    """Losing the write path is a degradation, not a failure."""
+    ledger = fresh_ledger()
+    _suite([True, False, True], patched)
+    _agent(patched, RecordingAgent())
+
+    job = worker.handle(make_job(), MemoryJobStore(), SETTINGS, ledger=ledger, librarian=None)
+
+    assert job.outcome is Outcome.PATCHED_REPAIRED
+    assert ledger.lookup(JINJA).recipe is None
