@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 
-__all__ = ["GITHUB_API", "GitHubClient", "GitHubError", "RepoMetadata"]
+__all__ = ["GITHUB_API", "GitHubClient", "GitHubError", "RateLimited", "RepoMetadata"]
 
 log = logging.getLogger("nightshift.github")
 
@@ -42,6 +42,26 @@ _PAGE_SIZE = 100
 
 class GitHubError(RuntimeError):
     """A GitHub request failed in a way the caller has to know about."""
+
+
+class RateLimited(GitHubError):
+    """The quota is gone. Its own type because it means something different.
+
+    An ordinary ``GitHubError`` is about one repository and the caller should
+    skip it and continue. This is about the next several hundred requests, and a
+    caller that treats it as a per-repository problem will spend its remaining
+    run hammering an endpoint that is answering nothing — which is both useless
+    and impolite.
+
+    It also produces *wrong data* rather than no data, which is worse: a tree
+    request that was refused looks exactly like a repository with no tests and
+    no pins, and would be rejected from the pool for a reason that was never
+    checked.
+    """
+
+    def __init__(self, message: str, *, retry_after_seconds: int = 0) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,12 +133,36 @@ class GitHubClient:
 
     def _get(self, path: str, **params: Any) -> httpx.Response:
         response = self._client.get(path, params=params or None)
-        if response.status_code == 403 and "rate limit" in response.text.lower():
-            raise GitHubError(
-                "GitHub rate limit reached. The pool is built once and reviewed by hand, "
-                "so waiting is the correct response rather than retrying harder."
-            )
+        self._raise_if_rate_limited(response)
         return response
+
+    @staticmethod
+    def _raise_if_rate_limited(response: httpx.Response) -> None:
+        """GitHub says this three ways, and one of them is easy to miss.
+
+        A secondary limit answers **429**, which earlier code did not look at
+        at all: the response was simply not 200, so ``list_paths`` returned an
+        empty list and the repository was assessed as having no tests and no
+        dependencies. Silently wrong, and rejected for a reason nobody checked.
+        """
+        if response.status_code not in {403, 429}:
+            return
+        body = response.text.lower()
+        if response.status_code != 429 and "rate limit" not in body and "abuse" not in body:
+            return  # a genuine 403: private repository, or a token without scope
+
+        wait = 0
+        header = response.headers.get("retry-after") or ""
+        if header.isdigit():
+            wait = int(header)
+        raise RateLimited(
+            "GitHub rate limit reached"
+            + (f"; retry after {wait}s" if wait else "")
+            + ". Without GITHUB_TOKEN the quota is 60 requests an hour — set it "
+            "and run again. The pool is built once and reviewed by hand, so "
+            "waiting is the correct response rather than retrying harder.",
+            retry_after_seconds=wait,
+        )
 
     # -- the five things ---------------------------------------------------- #
 
@@ -222,6 +266,7 @@ class GitHubClient:
         """
         body: dict[str, Any] = {"organization": organization} if organization else {}
         response = self._client.post(f"/repos/{repo}/forks", json=body)
+        self._raise_if_rate_limited(response)
         if response.status_code not in {200, 202}:
             raise GitHubError(
                 f"could not fork {repo}: {response.status_code} {response.text[:200]}"
