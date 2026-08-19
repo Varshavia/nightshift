@@ -82,6 +82,9 @@ class Settings:
     model_backend: str = "vertex"
 
     fork_org: str = ""
+    #: The reviewed list of repositories the fleet may touch. A path rather than
+    #: a query: the fleet never discovers its own targets. See ADR 0002.
+    fleet_pool_path: str = "fleet/pool.json"
     #: Read from the environment, never logged, never persisted, never defaulted.
     github_token: str | None = None
 
@@ -101,6 +104,7 @@ class Settings:
             triage_model=_env("NIGHTSHIFT_TRIAGE_MODEL", "gemma-3-27b-it"),
             model_backend=_env("NIGHTSHIFT_MODEL_BACKEND", "vertex"),
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),
+            fleet_pool_path=_env("NIGHTSHIFT_FLEET_POOL", "fleet/pool.json"),
             github_token=_env("GITHUB_TOKEN") or None,
             allow_upstream_prs=_env_bool("ALLOW_UPSTREAM_PRS", False),
             ceilings=Ceilings.from_env(),
