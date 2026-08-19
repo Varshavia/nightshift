@@ -236,7 +236,14 @@ def propose(candidates: Sequence[Candidate]) -> tuple[list[Candidate], list[tupl
     """Split candidates into accepted and ``(repo, reason)`` rejections."""
     accepted: list[Candidate] = []
     rejected: list[tuple[str, str]] = []
+    # Deduplicated here as well as at the search, because a proposal containing
+    # the same repository twice would be forked twice and counted twice, and the
+    # second copy would quietly inflate every number computed over the pool.
+    seen: set[str] = set()
     for candidate in candidates:
+        if candidate.repo in seen:
+            continue
+        seen.add(candidate.repo)
         ok, reason = eligibility(candidate)
         if ok:
             accepted.append(candidate)

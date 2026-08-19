@@ -149,8 +149,18 @@ def test_search_stops_at_the_limit_it_was_given() -> None:
     pages: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        pages.append(int(request.url.params.get("page", 1)))
-        return httpx.Response(200, json={"items": [REPO_JSON] * 100})
+        page = int(request.url.params.get("page", 1))
+        pages.append(page)
+        start = (page - 1) * 100
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {**REPO_JSON, "full_name": f"org/repo{n}"}
+                    for n in range(start, start + 100)
+                ]
+            },
+        )
 
     found = _client(handler).search_repositories("language:python", limit=150)
     assert len(found) == 150
@@ -238,3 +248,38 @@ def test_the_licence_and_archive_state_come_from_the_metadata() -> None:
 def test_a_repository_with_no_licence_field_does_not_crash() -> None:
     meta = RepoMetadata.from_api({**REPO_JSON, "license": None})
     assert meta.license_id == ""
+
+
+# --------------------------------------------------------------------------- #
+# Pagination is not stable, so search must deduplicate
+# --------------------------------------------------------------------------- #
+
+
+def test_repeated_results_across_pages_are_returned_once() -> None:
+    """GitHub's search pagination is not stable when the sort key has ties, and
+    star counts tie constantly. Measured on a real run: of 150 results about a
+    third were repeats, and each cost two requests to assess a second time."""
+    pages = {
+        1: [{**REPO_JSON, "full_name": f"org/{n}"} for n in ("a", "b", "c")],
+        2: [{**REPO_JSON, "full_name": f"org/{n}"} for n in ("b", "c", "d")],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("page", 1))
+        return httpx.Response(200, json={"items": pages.get(page, [])})
+
+    found = _client(handler).search_repositories("language:python", limit=10)
+    assert [m.full_name for m in found] == ["org/a", "org/b", "org/c", "org/d"]
+
+
+def test_a_page_of_nothing_but_repeats_ends_the_search() -> None:
+    """Otherwise paging loops over the same repositories until the limit."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(int(request.url.params.get("page", 1)))
+        return httpx.Response(200, json={"items": [REPO_JSON]})
+
+    found = _client(handler).search_repositories("language:python", limit=50)
+    assert len(found) == 1
+    assert calls == [1, 2]
