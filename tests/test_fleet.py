@@ -213,3 +213,18 @@ def test_size_is_carried_into_the_pool_entry() -> None:
     )
     assert entry.size_kb == 8_000
     assert FleetEntry.from_dict(entry.to_dict()).size_kb == 8_000
+
+
+def test_a_repository_proposed_twice_is_accepted_once() -> None:
+    """A duplicate would be forked twice and counted twice, inflating every
+    number computed over the pool."""
+    accepted, rejected = propose([application(repo="org/same"), application(repo="org/same")])
+    assert [c.repo for c in accepted] == ["org/same"]
+    assert rejected == []
+
+
+def test_a_repository_rejected_twice_is_reported_once() -> None:
+    _, rejected = propose(
+        [application(repo="org/lib", pinned_dependencies=0)] * 3
+    )
+    assert len(rejected) == 1
