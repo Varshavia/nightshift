@@ -23,6 +23,8 @@ from nightshift_core.models import Dependency
 
 __all__ = [
     "RECOGNISED_MANIFESTS",
+    "declared_extras",
+    "dependency_group_specs",
     "parse_manifest",
     "parse_pyproject",
     "parse_requirements",
@@ -154,6 +156,59 @@ def parse_pyproject(text: str, path: str = "pyproject.toml") -> list[Dependency]
             )
         )
     return found
+
+
+def declared_extras(pyproject_text: str) -> tuple[str, ...]:
+    """Extras this project actually declares.
+
+    Worth reading rather than guessing, because ``pip install .[test]`` **exits
+    zero when the extra does not exist** — it prints a warning and installs the
+    base package. A build step that trusts that exit code reports success while
+    having installed none of the test dependencies, and the suite then fails at
+    import. We would read that as ``BASELINE_RED`` and blame the repository for
+    breakage we caused ourselves.
+    """
+    try:
+        data = tomllib.loads(pyproject_text)
+    except tomllib.TOMLDecodeError:
+        return ()
+    optional = data.get("project", {}).get("optional-dependencies", {})
+    if not isinstance(optional, dict):
+        return ()
+    return tuple(str(name) for name in optional)
+
+
+def dependency_group_specs(
+    pyproject_text: str, group: str, *, _seen: frozenset[str] = frozenset()
+) -> list[str]:
+    """Requirement strings in a PEP 735 ``[dependency-groups]`` entry.
+
+    Modern projects increasingly put their test dependencies here rather than in
+    an extra — ``itsdangerous`` and ``loguru`` both do — and a builder that only
+    knows about extras will silently install nothing for them.
+
+    ``include-group`` references are resolved, with cycles broken rather than
+    followed into a recursion error.
+    """
+    try:
+        data = tomllib.loads(pyproject_text)
+    except tomllib.TOMLDecodeError:
+        return []
+    groups = data.get("dependency-groups", {})
+    if not isinstance(groups, dict) or group not in groups or group in _seen:
+        return []
+
+    specs: list[str] = []
+    for item in groups[group]:
+        if isinstance(item, str):
+            specs.append(item)
+        elif isinstance(item, dict) and "include-group" in item:
+            specs.extend(
+                dependency_group_specs(
+                    pyproject_text, str(item["include-group"]), _seen=_seen | {group}
+                )
+            )
+    return specs
 
 
 def parse_manifest(text: str, path: str) -> list[Dependency]:

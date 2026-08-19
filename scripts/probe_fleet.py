@@ -66,6 +66,10 @@ class ProbeVerdict(StrEnum):
 
     #: The environment could not be built. Expected, and counted.
     UNBUILDABLE = "UNBUILDABLE"
+    #: pytest failed on its own terms — internal error or bad invocation. Our
+    #: fault, not the repository's, and kept separate so it cannot be quietly
+    #: counted as a repository that arrived broken.
+    PROBE_ERROR = "PROBE_ERROR"
     #: pytest collected nothing. A repository with no tests cannot be its own evidence.
     NO_TESTS = "NO_TESTS"
     #: The suite was already failing before we touched anything.
@@ -158,6 +162,13 @@ def probe_one(
         return ProbeResult(repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=str(exc)[:500])
 
     baseline = run_tests(sandbox)
+    if baseline.internal_error:
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.PROBE_ERROR,
+            baseline_seconds=baseline.duration_seconds,
+            notes=f"pytest exit {baseline.exit_code}; " + "; ".join(sandbox.install_log[-3:]),
+        )
     if not baseline.collected:
         return ProbeResult(
             repo=repo,
@@ -229,10 +240,16 @@ def probe_fleet(
             try:
                 result = probe_one(repo, workspace, osv, token=token)
             # Broad on purpose: one bad repository must not end a fleet-wide run.
+            # The verdict is PROBE_ERROR, never UNBUILDABLE — an OSV outage or a
+            # network fault is our problem, and recording it against the
+            # repository would understate how much of the fleet is usable. That
+            # estimate is what the cloud budget is sized from.
             except Exception as exc:
                 log.exception("probe of %s raised", repo)
                 result = ProbeResult(
-                    repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=f"probe error: {exc}"[:500]
+                    repo=repo,
+                    verdict=ProbeVerdict.PROBE_ERROR,
+                    notes=f"{type(exc).__name__}: {exc}"[:500],
                 )
             results.append(result)
             log.info(

@@ -90,3 +90,26 @@ def test_the_probe_verdicts_are_not_the_job_outcomes() -> None:
 
     assert "PATCHED_REPAIRED" not in {str(v) for v in ProbeVerdict}
     assert "BREAKING" not in {str(o) for o in Outcome}
+
+
+def test_pytests_own_failures_are_not_blamed_on_the_repository() -> None:
+    """Exit 3 and 4 mean we invoked pytest wrongly, not that the suite is red.
+
+    Folding them into BASELINE_RED would inflate the count of repositories that
+    arrived broken and quietly excuse our own build bugs.
+    """
+    summary = summarise([_result(ProbeVerdict.PROBE_ERROR), _result(ProbeVerdict.BASELINE_RED)])
+    assert summary.counts["PROBE_ERROR"] == 1
+    assert summary.counts["BASELINE_RED"] == 1
+    assert summary.upgrades_attempted == 0
+
+
+def test_an_osv_outage_is_not_recorded_as_an_unbuildable_repository() -> None:
+    """Our network failing says nothing about the repository we were probing.
+
+    Filing it under UNBUILDABLE would understate how much of the fleet is
+    usable, and the fleet-size estimate is what the cloud budget is sized from.
+    """
+    summary = summarise([_result(ProbeVerdict.PROBE_ERROR)])
+    assert summary.counts["UNBUILDABLE"] == 0
+    assert summary.counts["PROBE_ERROR"] == 1
