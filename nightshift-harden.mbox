@@ -1,0 +1,1001 @@
+From 4cfe5e3327a1a5d7fae26ca9e47b3bab33476241 Mon Sep 17 00:00:00 2001
+From: Nightshift <noreply@example.com>
+Date: Wed, 19 Aug 2026 08:28:30 +0000
+Subject: [PATCH 1/2] fix(ci): type-check google.genai like the rest of the
+ Google stack
+
+google-adk declares google-genai as an unconditional dependency, so CI installs
+it and mypy resolves the import in agent.py. The override list covered
+google.cloud, google.adk and github but not google.genai, so `make check` passed
+locally on a machine without the package and failed in CI on one with it.
+---
+ pyproject.toml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pyproject.toml b/pyproject.toml
+index 3771d0d..6048878 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -73,5 +73,5 @@ strict = true
+ warn_unreachable = true
+ # Third-party packages without stubs. Keep this list short and justified.
+ [[tool.mypy.overrides]]
+-module = ["google.cloud.*", "google.adk.*", "github.*"]
++module = ["google.cloud.*", "google.adk.*", "google.genai.*", "github.*"]
+ ignore_missing_imports = true
+-- 
+2.43.0
+
+
+From fa15c196a48798a0017eda26da12ee965f049ddb Mon Sep 17 00:00:00 2001
+From: Nightshift <noreply@example.com>
+Date: Wed, 19 Aug 2026 08:28:30 +0000
+Subject: [PATCH 2/2] feat(worker): refuse a green suite that undid the upgrade
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Probing the policy engine rather than reading it turned up five ways for the
+repair agent to make the suite green without fixing anything. Three were inert
+by accident: the loop decides from its own fixed-argv test run, so --deselect,
+--ignore and -k never reach the verdict. That accident is now pinned by a test.
+
+One was real. `pip install jinja2==2.11.3` reinstalls the vulnerable version,
+the suite goes green, the job ends PATCHED_REPAIRED and a pull request opens
+with the advisory still unfixed. The instruction prompt tells the agent not to
+do this, and the whole argument of this project is that an instruction is not a
+guarantee.
+
+Two defences, in order of importance:
+
+- After a green suite, the installed version of every upgraded package is read
+  out of the sandbox and compared to the fixed version. Drift means the green
+  proves nothing: the attempt is recorded as failed and the agent is told why,
+  so it does not spend its remaining attempts the same way. This catches every
+  route to a false green, including ones nobody has thought of.
+- The policy engine gains a no-downgrade rule for the packages a job came to
+  upgrade. `pip install -r requirements.txt` stays allowed, because the manifest
+  already carries the new pin. Naming the package is what is refused.
+
+Also fixes the wall-clock ceiling, which only accumulated per-attempt durations
+and therefore excluded clone, environment build and both full suite runs — the
+slowest phases of a job. A repository taking twenty-five minutes to install was
+entering the repair loop with a ceiling that had not started counting. Budget
+now has one clock, started once and read everywhere.
+---
+ packages/nightshift_core/policy.py |  83 ++++++-
+ services/worker/main.py            |  16 +-
+ services/worker/repair.py          |  49 +++-
+ services/worker/toolchain.py       | 101 ++++++++
+ tests/test_false_green.py          | 368 +++++++++++++++++++++++++++++
+ tests/test_repair_loop.py          |  20 +-
+ tests/test_worker_handle.py        |   4 +
+ 7 files changed, 629 insertions(+), 12 deletions(-)
+ create mode 100644 tests/test_false_green.py
+
+diff --git a/packages/nightshift_core/policy.py b/packages/nightshift_core/policy.py
+index 85e1423..77bdf95 100644
+--- a/packages/nightshift_core/policy.py
++++ b/packages/nightshift_core/policy.py
+@@ -22,6 +22,7 @@ Four things it exists to guarantee:
+ 
+ from __future__ import annotations
+ 
++import re
+ import shlex
+ from collections.abc import Mapping, Sequence
+ from dataclasses import dataclass, field
+@@ -30,6 +31,8 @@ from pathlib import PurePosixPath
+ from typing import Any
+ from urllib.parse import urlparse
+ 
++from packaging.utils import canonicalize_name
++
+ from nightshift_core.config import Ceilings, Settings
+ 
+ __all__ = [
+@@ -92,17 +95,33 @@ class ToolCall:
+ class Budget:
+     """What the job has spent so far. The worker advances this; policy reads it.
+ 
+-    ``elapsed_seconds`` is passed in rather than measured so that the engine
+-    stays pure and the tests stay deterministic.
++    Time is *passed in* rather than measured here, so the engine stays pure and
++    the tests stay deterministic. But there is only one way to advance it —
++    :meth:`start` then :meth:`tick` — because the alternative was accumulating
++    per-attempt durations, and that silently excluded clone, environment build
++    and both full test runs. Those are the slowest phases of a job by a wide
++    margin: a repository that takes twenty-five minutes to install was entering
++    the repair loop with a wall-clock ceiling that had not started counting.
+     """
+ 
+     attempts: int = 0
+     tokens: int = 0
+     elapsed_seconds: float = 0.0
++    #: Monotonic origin of the job's wall clock. ``None`` until :meth:`start`.
++    started_at: float | None = None
++
++    def start(self, now: float) -> None:
++        """Begin the wall clock. Everything the job does after this counts."""
++        self.started_at = now
++
++    def tick(self, now: float) -> None:
++        """Refresh elapsed time. A no-op until the clock has been started."""
++        if self.started_at is not None:
++            self.elapsed_seconds = now - self.started_at
+ 
+-    def spend(self, *, tokens: int = 0, seconds: float = 0.0, attempts: int = 0) -> None:
++    def spend(self, *, tokens: int = 0, attempts: int = 0) -> None:
++        """Record consumption that is counted rather than clocked."""
+         self.tokens += tokens
+-        self.elapsed_seconds += seconds
+         self.attempts += attempts
+ 
+ 
+@@ -152,6 +171,9 @@ DENIED_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
+     {"merge", "rebase", "reset", "clean", "filter-branch", "gc", "config", "remote"}
+ )
+ 
++#: Executables that can change what is installed in the sandbox.
++INSTALLERS: frozenset[str] = frozenset({"pip", "pip3", "uv", "poetry"})
++
+ #: Hosts the sandbox may reach. Package indexes to install, OSV to re-check an
+ #: advisory, GitHub to open the pull request. Nothing else.
+ ALLOWED_HOSTS: frozenset[str] = frozenset(
+@@ -174,6 +196,23 @@ PROTECTED_WRITE_FILES: frozenset[str] = frozenset(
+ )
+ 
+ 
++def _distribution_name(argument: str) -> str | None:
++    """The package name in a pip argument, or None if it is not one.
++
++    ``jinja2==2.11.3``, ``Jinja2[extra]>=3`` and poetry's ``jinja2@2.11.3`` all
++    yield ``jinja2``; a path like ``requirements.txt`` or ``.`` yields something
++    that will never match a protected name, which is the behaviour we want.
++
++    ``@`` is in the separator set for two reasons: poetry spells versions that
++    way, and PEP 508 direct references (``name @ https://...``) put the name
++    before it too.
++    """
++    head = re.split(r"[=<>!~@\[;\s]", argument, maxsplit=1)[0].strip()
++    if not head or head.startswith(".") or "/" in head or "\\" in head:
++        return None
++    return str(canonicalize_name(head))
++
++
+ def _is_test_path(path: str) -> bool:
+     """True for anything that is part of the test suite.
+ 
+@@ -205,10 +244,17 @@ class PolicyEngine:
+         settings: Settings | None = None,
+         workspace: str = "/workspace/repo",
+         ceilings: Ceilings | None = None,
++        protected_packages: Sequence[str] = (),
+     ) -> None:
+         self.settings = settings or Settings()
+         self.ceilings = ceilings or self.settings.ceilings
+         self.workspace = PurePosixPath(workspace)
++        #: Packages this job came to upgrade. The agent may not reinstall them at
++        #: a version of its own choosing — that is the one command that turns a
++        #: red suite green while leaving the advisory unfixed.
++        self.protected_packages = frozenset(
++            str(canonicalize_name(name)) for name in protected_packages
++        )
+         self._audit: list[tuple[ToolCall, Decision]] = []
+ 
+     # -- public API --------------------------------------------------------- #
+@@ -382,6 +428,35 @@ class PolicyEngine:
+             )
+         if executable == "git":
+             return self._check_git(argv, command_text)
++        if executable in INSTALLERS:
++            return self._check_installer(argv)
++        return Decision(Effect.ALLOW, "command-allowed")
++
++    def _check_installer(self, argv: list[str]) -> Decision:
++        """An installer may not touch the packages this job came to upgrade.
++
++        ``pip install -r requirements.txt`` stays allowed: the manifest already
++        carries the new pin, so reinstalling from it re-applies the upgrade
++        rather than undoing it. Naming the package directly is what is refused,
++        because the version then comes from the agent rather than the advisory.
++
++        This is a second line of defence, not the main one. The main one is
++        checking afterwards that the upgrade is still installed — an allowlist
++        can only forbid the routes we thought of.
++        """
++        if not self.protected_packages:
++            return Decision(Effect.ALLOW, "command-allowed")
++        for argument in argv[1:]:
++            if argument.startswith("-"):
++                continue
++            name = _distribution_name(argument)
++            if name and name in self.protected_packages:
++                return Decision(
++                    Effect.DENY,
++                    "no-downgrade",
++                    f"{name} is the package this job came to upgrade; reinstalling it "
++                    "by name would undo the fix the pull request claims to make",
++                )
+         return Decision(Effect.ALLOW, "command-allowed")
+ 
+     def _check_git(self, argv: list[str], command_text: str) -> Decision:
+diff --git a/services/worker/main.py b/services/worker/main.py
+index 0918c36..c31adcf 100644
+--- a/services/worker/main.py
++++ b/services/worker/main.py
+@@ -25,6 +25,7 @@ fleet for free before a token is spent.
+ from __future__ import annotations
+ 
+ import logging
++import time
+ from pathlib import Path
+ 
+ from nightshift_core.config import Settings, get_settings
+@@ -95,6 +96,7 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
+     """Process one job to a terminal outcome. Checkpointed at every phase."""
+     settings = settings or get_settings()
+     budget = Budget()
++    budget.start(time.monotonic())
+     workspace = Path(settings.workspace_root) / job.job_id.replace(":", "_").replace("/", "_")
+ 
+     def checkpoint(phase: Phase) -> None:
+@@ -116,7 +118,15 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
+     # Built here, not before the clone: the engine judges paths against the real
+     # workspace, and until the clone lands there is no real workspace to judge
+     # against. Constructing it earlier made every local path look like an escape.
+-    policy = PolicyEngine(settings=settings, workspace=repo_path.as_posix())
++    # The protected set is the packages this job came to upgrade. Passing it
++    # here rather than hard-coding a rule keeps the engine general: it refuses to
++    # let the agent reinstall *these* packages by name, and says nothing about
++    # any others.
++    policy = PolicyEngine(
++        settings=settings,
++        workspace=repo_path.as_posix(),
++        protected_packages=[v.package for v in job.vulnerabilities],
++    )
+ 
+     checkpoint(Phase.BASELINE)
+     try:
+@@ -147,6 +157,10 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
+ 
+     checkpoint(Phase.VERIFY)
+     verified = run_tests(sandbox)
++    # Clone, build and two full suite runs happened before this line, and they
++    # are the slowest part of a job. The repair loop inherits the time they
++    # spent rather than starting from zero.
++    budget.tick(time.monotonic())
+ 
+     repaired = False
+     if not verified.passed:
+diff --git a/services/worker/repair.py b/services/worker/repair.py
+index d009eaf..6932754 100644
+--- a/services/worker/repair.py
++++ b/services/worker/repair.py
+@@ -17,16 +17,24 @@ from __future__ import annotations
+ 
+ import logging
+ import time
+-from collections.abc import Callable
++from collections.abc import Callable, Sequence
+ from dataclasses import dataclass
+ from typing import Protocol
+ 
+ from nightshift_core.models import RepairAttempt, RepoJob, Vulnerability
+ from nightshift_core.policy import Budget, PolicyEngine, ToolCall
+-from services.worker.toolchain import Sandbox, TestReport, capture_diff, run_tests
++from services.worker.toolchain import (
++    Sandbox,
++    TestReport,
++    UpgradeDrift,
++    capture_diff,
++    run_tests,
++    upgrade_drift,
++)
+ from services.worker.tools import SandboxTools
+ 
+ __all__ = [
++    "DRIFT_PREAMBLE",
+     "RepairAgent",
+     "RepairContext",
+     "RepairProposal",
+@@ -35,6 +43,15 @@ __all__ = [
+ 
+ log = logging.getLogger("nightshift.repair")
+ 
++#: What the agent is told when it made the suite green by undoing the upgrade.
++#: Phrased as a failure because that is what it is — the job is not closer to
++#: done than it was before the attempt.
++DRIFT_PREAMBLE = (
++    "The suite passes, but the upgrade is no longer installed, so this proves "
++    "nothing. The upgrade is the point; the tests exist to show the calling code "
++    "survives it.\n"
++)
++
+ 
+ @dataclass(frozen=True, slots=True)
+ class RepairContext:
+@@ -72,6 +89,7 @@ def run_repair_loop(
+     tools: SandboxTools | None = None,
+     run_suite: Callable[..., TestReport] | None = None,
+     capture: Callable[[Sandbox], str] | None = None,
++    check_drift: Callable[..., Sequence[UpgradeDrift]] | None = None,
+ ) -> bool:
+     """Repair until the suite is green or a ceiling is reached. True when green.
+ 
+@@ -84,6 +102,7 @@ def run_repair_loop(
+     # test would never reach it and the suite would quietly run for real.
+     run_suite = run_suite or run_tests
+     capture = capture or capture_diff
++    check_drift = check_drift or upgrade_drift
+     failing_output = failure.output
+ 
+     while True:
+@@ -123,21 +142,39 @@ def run_repair_loop(
+         verdict = run_suite(sandbox)
+         duration = time.monotonic() - started
+ 
++        # A green suite is necessary and not sufficient. Every tool the agent has
++        # is gated, but the engine reasons about actions and there are more ways
++        # to change an environment than an allowlist can enumerate. So the
++        # outcome is checked directly: if the library we came to upgrade is not
++        # the version we upgraded it to, the suite passing means nothing.
++        drift = tuple(check_drift(sandbox, job.vulnerabilities)) if verdict.passed else ()
++        green = verdict.passed and not drift
++
+         job.record_attempt(
+             RepairAttempt(
+                 attempt=attempt_number,
+                 failing_output=failing_output,
+                 diff=capture(sandbox),
+                 rationale=proposal.rationale,
+-                tests_passed=verdict.passed,
++                tests_passed=green,
+                 tokens_used=proposal.tokens_used,
+                 duration_seconds=duration,
+             )
+         )
+-        budget.spend(tokens=proposal.tokens_used, seconds=duration, attempts=1)
++        budget.spend(tokens=proposal.tokens_used, attempts=1)
++        budget.tick(time.monotonic())
+ 
+-        if verdict.passed:
++        if green:
+             log.info("job %s repaired on attempt %d", job.job_id, attempt_number)
+             return True
+ 
+-        failing_output = verdict.output
++        if drift:
++            log.warning(
++                "job %s went green on attempt %d by undoing the upgrade: %s",
++                job.job_id,
++                attempt_number,
++                "; ".join(str(entry) for entry in drift),
++            )
++            failing_output = DRIFT_PREAMBLE + "\n".join(str(entry) for entry in drift)
++        else:
++            failing_output = verdict.output
+diff --git a/services/worker/toolchain.py b/services/worker/toolchain.py
+index d1a5eab..b946938 100644
+--- a/services/worker/toolchain.py
++++ b/services/worker/toolchain.py
+@@ -19,6 +19,7 @@ be theatre, and worse, it would blur where the trust boundary actually is.
+ 
+ from __future__ import annotations
+ 
++import json
+ import logging
+ import os
+ import shutil
+@@ -27,6 +28,8 @@ from collections.abc import Sequence
+ from dataclasses import dataclass, field
+ from pathlib import Path
+ 
++from packaging.version import InvalidVersion, Version
++
+ from nightshift_core.manifests import (
+     RECOGNISED_MANIFESTS,
+     declared_extras,
+@@ -41,6 +44,7 @@ __all__ = [
+     "EnvironmentBuildError",
+     "Sandbox",
+     "TestReport",
++    "UpgradeDrift",
+     "UpgradeError",
+     "apply_upgrade",
+     "build_environment",
+@@ -48,7 +52,9 @@ __all__ = [
+     "clone",
+     "diff_stats",
+     "discover_manifests",
++    "installed_versions",
+     "run_tests",
++    "upgrade_drift",
+ ]
+ 
+ log = logging.getLogger("nightshift.toolchain")
+@@ -491,3 +497,98 @@ def diff_stats(diff: str) -> DiffStats:
+         elif line.startswith("-") and not line.startswith("---"):
+             removed += 1
+     return DiffStats(files=files, added=added, removed=removed)
++
++
++# --------------------------------------------------------------------------- #
++# Verifying that the upgrade survived the repair
++# --------------------------------------------------------------------------- #
++
++
++@dataclass(frozen=True, slots=True)
++class UpgradeDrift:
++    """An upgraded package that is no longer at the version we upgraded it to."""
++
++    package: str
++    expected: str
++    installed: str | None
++
++    def __str__(self) -> str:
++        found = self.installed or "not installed"
++        return f"{self.package}: expected {self.expected}, found {found}"
++
++
++def installed_versions(sandbox: Sandbox, packages: Sequence[str]) -> dict[str, str | None]:
++    """What is actually importable in the sandbox right now.
++
++    Read from the environment rather than from the manifest, because the
++    manifest is what we wrote and the environment is what the tests ran against.
++    Those two can disagree, and when they do it is the environment that decides
++    whether a green suite means anything.
++    """
++    if not packages:
++        return {}
++    script = (
++        "import json\n"
++        "from importlib.metadata import PackageNotFoundError, version\n"
++        f"names = {list(packages)!r}\n"
++        "out = {}\n"
++        "for name in names:\n"
++        "    try:\n"
++        "        out[name] = version(name)\n"
++        "    except PackageNotFoundError:\n"
++        "        out[name] = None\n"
++        "print(json.dumps(out))\n"
++    )
++    result = sandbox.run([sandbox.python, "-c", script], timeout=120)
++    if result.returncode != 0:
++        log.warning("could not read installed versions: %s", _tail(result.stderr, 500))
++        return dict.fromkeys(packages)
++    try:
++        parsed: dict[str, str | None] = json.loads(result.stdout.strip().splitlines()[-1])
++    except (ValueError, IndexError):  # pragma: no cover - defensive
++        return dict.fromkeys(packages)
++    return parsed
++
++
++def upgrade_drift(
++    sandbox: Sandbox, vulnerabilities: Sequence[Vulnerability]
++) -> list[UpgradeDrift]:
++    """Packages that are no longer at the fixed version. Empty means intact.
++
++    This is the check that makes a green suite mean something. Every tool the
++    repair agent has is gated by the policy engine, but the engine reasons about
++    *actions*, and there are more ways to change an environment than any
++    allowlist will ever enumerate — ``pip install`` at an older version being the
++    obvious one. So rather than trying to forbid each of them, the outcome is
++    verified directly: if the library we came to upgrade is not the version we
++    upgraded it to, the suite passing proves nothing at all.
++
++    Without this, an agent that runs ``pip install jinja2==2.11.3`` produces a
++    green suite, a manifest that claims 3.1.2, a PATCHED_REPAIRED outcome and an
++    open pull request — with the advisory still unfixed. The instruction tells it
++    not to. This project's whole argument is that an instruction is not a
++    guarantee.
++    """
++    expected = {v.package: v.fixed_version for v in vulnerabilities if v.fixed_version}
++    if not expected:
++        return []
++    found = installed_versions(sandbox, sorted(expected))
++    drift: list[UpgradeDrift] = []
++    for package, wanted in sorted(expected.items()):
++        actual = found.get(package)
++        if actual is None or _version_or_none(actual) != _version_or_none(wanted):
++            drift.append(UpgradeDrift(package=package, expected=wanted, installed=actual))
++    return drift
++
++
++def _version_or_none(raw: str) -> Version | str:
++    """Compare as versions where possible, as text otherwise.
++
++    ``3.1.2`` and ``3.1.2.post0`` are different releases and must not be treated
++    as equal, but ``1.0`` and ``1.0.0`` are the same one and must not be treated
++    as different.
++    """
++    try:
++        return Version(raw)
++    except InvalidVersion:
++        return raw
+diff --git a/tests/test_false_green.py b/tests/test_false_green.py
+new file mode 100644
+index 0000000..5e00b56
+--- /dev/null
++++ b/tests/test_false_green.py
+@@ -0,0 +1,368 @@
++"""Can the agent make the suite green without fixing anything?
++
++Every test here is an attempt to produce a **false green**: a passing suite, a
++``PATCHED_REPAIRED`` outcome and an open pull request, with the advisory still
++unfixed. That is the single most damaging thing this project could do, because
++it is indistinguishable from success from the outside.
++
++Five routes were open when this file was written, found by probing the engine
++rather than by reading it:
++
++    ALLOW  pip install jinja2==2.11.3           downgrade the library
++    ALLOW  git checkout -- .                    revert the working tree
++    ALLOW  git stash                            stash the upgrade
++    ALLOW  pytest --deselect tests/x.py::test   deselect the failing test
++    ALLOW  pytest --ignore=tests/x.py           skip the failing file
++
++Three of them were harmless, but only by accident: the loop decides from its own
++fixed-argv test run, so whatever the agent passes to pytest never reaches the
++verdict. That accident is pinned down here so it cannot quietly stop being true.
++
++The first was real. The instruction prompt tells the agent not to pin the
++dependency back down — and this project's whole argument is that an instruction
++is not a guarantee.
++"""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++from services.worker import repair as repair_module
++from services.worker.repair import DRIFT_PREAMBLE, RepairContext, RepairProposal, run_repair_loop
++from services.worker.toolchain import Sandbox, TestReport, UpgradeDrift, upgrade_drift
++from services.worker.tools import SandboxTools
++
++from nightshift_core.config import Ceilings, Settings
++from nightshift_core.models import RepoJob, Severity, Vulnerability
++from nightshift_core.policy import Budget, Effect, PolicyEngine, ToolCall
++
++VULNERABILITY = Vulnerability(
++    osv_id="GHSA-test",
++    package="jinja2",
++    installed_version="2.11.3",
++    fixed_version="3.1.2",
++    severity=Severity.HIGH,
++)
++
++
++@pytest.fixture
++def engine() -> PolicyEngine:
++    return PolicyEngine(
++        settings=Settings(fork_org="nightshift-fleet"),
++        workspace="/workspace/repo",
++        protected_packages=["jinja2"],
++    )
++
++
++# --------------------------------------------------------------------------- #
++# Route 1 — reinstall the library at the version that was vulnerable
++# --------------------------------------------------------------------------- #
++
++
++@pytest.mark.parametrize(
++    "command",
++    [
++        ["pip", "install", "jinja2==2.11.3"],
++        ["pip", "install", "-U", "jinja2==2.11.3"],
++        ["pip3", "install", "Jinja2==2.11.3"],
++        ["pip", "install", "jinja2[i18n]==2.11.3"],
++        ["pip", "install", "jinja2<3"],
++        ["pip", "uninstall", "-y", "jinja2"],
++        ["uv", "pip", "install", "jinja2==2.11.3"],
++        ["poetry", "add", "jinja2@2.11.3"],
++    ],
++)
++def test_the_agent_cannot_reinstall_the_package_it_came_to_upgrade(
++    engine: PolicyEngine, command: list[str]
++) -> None:
++    decision = engine.check(ToolCall("run_command", {"command": command}))
++    assert decision.effect is Effect.DENY, command
++    assert decision.rule == "no-downgrade"
++
++
++def test_reinstalling_from_the_manifest_stays_allowed(engine: PolicyEngine) -> None:
++    """The manifest already carries the new pin, so this re-applies the upgrade.
++
++    Denying it would break the ordinary case — an agent that adds a missing test
++    dependency and reinstalls — to defend against nothing.
++    """
++    for command in (["pip", "install", "-r", "requirements.txt"], ["pip", "install", "-e", "."]):
++        assert engine.check(ToolCall("run_command", {"command": command})).allowed
++
++
++def test_unrelated_packages_are_not_protected(engine: PolicyEngine) -> None:
++    """Only the packages this job came to upgrade are off limits."""
++    call = ToolCall("run_command", {"command": ["pip", "install", "freezegun"]})
++    assert engine.check(call).allowed
++
++
++def test_an_engine_with_nothing_to_protect_behaves_as_before() -> None:
++    plain = PolicyEngine(settings=Settings(fork_org="x"), workspace="/workspace/repo")
++    call = ToolCall("run_command", {"command": ["pip", "install", "jinja2==2.11.3"]})
++    assert plain.check(call).allowed
++
++
++# --------------------------------------------------------------------------- #
++# Routes 4 and 5 — the agent cannot influence the verdict, and that is by design
++# --------------------------------------------------------------------------- #
++
++
++class DeselectingAgent:
++    """Tries to win by telling pytest to skip the test that fails."""
++
++    def __init__(self) -> None:
++        self.contexts: list[RepairContext] = []
++
++    def attempt(self, context: RepairContext, tools: SandboxTools) -> RepairProposal:
++        self.contexts.append(context)
++        tools.run_command(["pytest", "--deselect", "tests/test_a.py::test_broken"])
++        tools.run_command(["pytest", "-k", "not broken"])
++        return RepairProposal(rationale="deselected the failure", tokens_used=10)
++
++
++def test_what_the_agent_runs_never_becomes_the_verdict(tmp_path: Path) -> None:
++    """The loop re-runs the suite itself, with an argv the agent cannot reach.
++
++    So ``--deselect``, ``--ignore`` and ``-k`` are inert. They are allowed by the
++    executable allowlist and it does not matter — which is the correct shape, but
++    only as long as the loop keeps deciding for itself. This test is what stops
++    that from silently changing.
++    """
++    job, sandbox, tools, policy, budget = _fixtures(tmp_path)
++    agent = DeselectingAgent()
++
++    repaired = run_repair_loop(
++        job,
++        sandbox,
++        TestReport(passed=False, output="boom", duration_seconds=0.1),
++        policy,
++        budget,
++        agent,
++        tools=tools,
++        run_suite=lambda sandbox, **kwargs: TestReport(
++            passed=False, output="still boom", duration_seconds=0.1
++        ),
++        capture=lambda sandbox: "",
++        check_drift=lambda sandbox, vulns: [],
++    )
++
++    assert repaired is False, "the agent's own pytest invocation must not decide anything"
++
++
++# --------------------------------------------------------------------------- #
++# The check that catches every route, including ones nobody has thought of
++# --------------------------------------------------------------------------- #
++
++
++class DowngradingAgent:
++    """Makes the suite green by putting the vulnerable version back."""
++
++    def __init__(self) -> None:
++        self.contexts: list[RepairContext] = []
++
++    def attempt(self, context: RepairContext, tools: SandboxTools) -> RepairProposal:
++        self.contexts.append(context)
++        return RepairProposal(rationale="downgraded", tokens_used=10)
++
++
++def test_a_green_suite_with_the_upgrade_undone_is_not_a_repair(tmp_path: Path) -> None:
++    job, sandbox, tools, policy, budget = _fixtures(tmp_path)
++    agent = DowngradingAgent()
++    drift = [UpgradeDrift(package="jinja2", expected="3.1.2", installed="2.11.3")]
++
++    repaired = run_repair_loop(
++        job,
++        sandbox,
++        TestReport(passed=False, output="boom", duration_seconds=0.1),
++        policy,
++        budget,
++        agent,
++        tools=tools,
++        run_suite=lambda sandbox, **kwargs: TestReport(
++            passed=True, output="all green", duration_seconds=0.1
++        ),
++        capture=lambda sandbox: "",
++        check_drift=lambda sandbox, vulns: drift,
++    )
++
++    assert repaired is False, "a green suite proves nothing if the upgrade is gone"
++    assert all(not attempt.tests_passed for attempt in job.repair_attempts)
++    assert job.outcome is None, "the loop never decides the outcome"
++
++
++def test_the_agent_is_told_why_its_green_did_not_count(tmp_path: Path) -> None:
++    """A silent rejection would burn every remaining attempt the same way."""
++    job, sandbox, tools, policy, budget = _fixtures(tmp_path)
++    agent = DowngradingAgent()
++    drift = [UpgradeDrift(package="jinja2", expected="3.1.2", installed="2.11.3")]
++
++    run_repair_loop(
++        job, sandbox,
++        TestReport(passed=False, output="boom", duration_seconds=0.1),
++        policy, budget, agent,
++        tools=tools,
++        run_suite=lambda sandbox, **kwargs: TestReport(True, "green", 0.1),
++        capture=lambda sandbox: "",
++        check_drift=lambda sandbox, vulns: drift,
++    )
++
++    second = agent.contexts[1].failing_output
++    assert DRIFT_PREAMBLE in second
++    assert "expected 3.1.2, found 2.11.3" in second
++
++
++def test_drift_is_only_checked_when_there_is_a_green_to_doubt(tmp_path: Path) -> None:
++    """Reading installed versions costs a subprocess; a red suite has not earned one."""
++    job, sandbox, tools, policy, budget = _fixtures(tmp_path)
++    calls: list[object] = []
++
++    def record(sandbox: Sandbox, vulnerabilities: object) -> list[UpgradeDrift]:
++        calls.append(vulnerabilities)
++        return []
++
++    run_repair_loop(
++        job, sandbox,
++        TestReport(passed=False, output="boom", duration_seconds=0.1),
++        policy, budget, DowngradingAgent(),
++        tools=tools,
++        run_suite=lambda sandbox, **kwargs: TestReport(False, "boom", 0.1),
++        capture=lambda sandbox: "",
++        check_drift=record,
++    )
++
++    assert calls == []
++
++
++def test_an_intact_upgrade_with_a_green_suite_is_a_repair(tmp_path: Path) -> None:
++    job, sandbox, tools, policy, budget = _fixtures(tmp_path)
++    repaired = run_repair_loop(
++        job, sandbox,
++        TestReport(passed=False, output="boom", duration_seconds=0.1),
++        policy, budget, DowngradingAgent(),
++        tools=tools,
++        run_suite=lambda sandbox, **kwargs: TestReport(True, "green", 0.1),
++        capture=lambda sandbox: "",
++        check_drift=lambda sandbox, vulns: [],
++    )
++    assert repaired is True
++
++
++# --------------------------------------------------------------------------- #
++# Reading the environment rather than the manifest
++# --------------------------------------------------------------------------- #
++
++
++def _stub_versions(monkeypatch: pytest.MonkeyPatch, found: dict[str, str | None]) -> None:
++    monkeypatch.setattr(
++        "services.worker.toolchain.installed_versions",
++        lambda sandbox, packages: {name: found.get(name) for name in packages},
++    )
++
++
++def test_the_upgrade_is_intact_when_the_installed_version_matches(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    _stub_versions(monkeypatch, {"jinja2": "3.1.2"})
++    sandbox = Sandbox(repo_path=tmp_path, python=Path("/usr/bin/python3"))
++    assert upgrade_drift(sandbox, [VULNERABILITY]) == []
++
++
++def test_equivalent_version_spellings_are_not_drift(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """``3.1.2`` and ``3.1.2.0`` are the same release. Reporting drift here would
++    fail honest repairs for a formatting difference."""
++    _stub_versions(monkeypatch, {"jinja2": "3.1.2.0"})
++    sandbox = Sandbox(repo_path=tmp_path, python=Path("/usr/bin/python3"))
++    assert upgrade_drift(sandbox, [VULNERABILITY]) == []
++
++
++@pytest.mark.parametrize("installed", ["2.11.3", "3.1.1", "3.1.2.post1", None])
++def test_anything_other_than_the_fixed_version_is_drift(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, installed: str | None
++) -> None:
++    """``3.1.2.post1`` counts too: it is a different release, and we did not
++    choose it. Whatever put it there is something we did not verify."""
++    _stub_versions(monkeypatch, {"jinja2": installed})
++    sandbox = Sandbox(repo_path=tmp_path, python=Path("/usr/bin/python3"))
++    drift = upgrade_drift(sandbox, [VULNERABILITY])
++    assert [entry.package for entry in drift] == ["jinja2"]
++    assert drift[0].installed == installed
++
++
++def test_an_advisory_with_no_fix_cannot_drift(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    _stub_versions(monkeypatch, {})
++    unfixable = Vulnerability(
++        osv_id="GHSA-b", package="abandoned", installed_version="1.0", fixed_version=None
++    )
++    sandbox = Sandbox(repo_path=tmp_path, python=Path("/usr/bin/python3"))
++    assert upgrade_drift(sandbox, [unfixable]) == []
++
++
++# --------------------------------------------------------------------------- #
++# The wall clock covers the whole job, not just the loop
++# --------------------------------------------------------------------------- #
++
++
++def test_the_wall_clock_counts_from_the_start_of_the_job() -> None:
++    """Clone, build and two suite runs are the slowest phases of a job.
++
++    Accumulating only per-attempt durations excluded all of them, so a repository
++    that took twenty-five minutes to install entered the repair loop with a
++    wall-clock ceiling that had not started counting.
++    """
++    budget = Budget()
++    budget.start(1_000.0)
++    budget.tick(1_000.0 + 1_500.0)
++    assert budget.elapsed_seconds == 1_500.0
++
++
++def test_the_clock_is_inert_until_it_is_started() -> None:
++    budget = Budget()
++    budget.tick(9_999.0)
++    assert budget.elapsed_seconds == 0.0
++
++
++def test_time_spent_before_the_loop_still_counts_against_the_ceiling() -> None:
++    engine = PolicyEngine(
++        settings=Settings(ceilings=Ceilings(max_job_seconds=600)), workspace="/workspace/repo"
++    )
++    budget = Budget()
++    budget.start(0.0)
++    budget.tick(601.0)  # spent entirely on cloning and installing
++    decision = engine.check(ToolCall("read_file", {"path": "app.py"}), budget)
++    assert decision.effect is Effect.DENY
++    assert decision.rule == "ceiling-wallclock"
++
++
++# --------------------------------------------------------------------------- #
++
++
++def _fixtures(
++    tmp_path: Path,
++) -> tuple[RepoJob, Sandbox, SandboxTools, PolicyEngine, Budget]:
++    root = tmp_path / "repo"
++    root.mkdir()
++    (root / "app.py").write_text("x = 1\n", encoding="utf-8")
++    settings = Settings(
++        fork_org="nightshift-fleet",
++        ceilings=Ceilings(max_repair_attempts=2, max_job_seconds=600, max_job_tokens=100_000),
++    )
++    policy = PolicyEngine(
++        settings=settings, workspace=root.as_posix(), protected_packages=["jinja2"]
++    )
++    budget = Budget()
++    sandbox = Sandbox(repo_path=root, python=Path("/usr/bin/python3"))
++    tools = SandboxTools(sandbox=sandbox, policy=policy, budget=budget)
++    job = RepoJob(
++        job_id="run:owner/name", repo="owner/name", vulnerabilities=[VULNERABILITY]
++    )
++    return job, sandbox, tools, policy, budget
++
++
++def test_the_loop_resolves_the_real_check_by_default() -> None:
++    """A stub reaching production would disable every guarantee in this file."""
++    assert getattr(repair_module, "upgrade_drift") is upgrade_drift  # noqa: B009
+diff --git a/tests/test_repair_loop.py b/tests/test_repair_loop.py
+index 52e08a1..3d5d7b6 100644
+--- a/tests/test_repair_loop.py
++++ b/tests/test_repair_loop.py
+@@ -11,7 +11,7 @@ from pathlib import Path
+ 
+ import pytest
+ from services.worker.repair import RepairContext, RepairProposal, run_repair_loop
+-from services.worker.toolchain import Sandbox, TestReport
++from services.worker.toolchain import Sandbox, TestReport, UpgradeDrift
+ from services.worker.tools import SandboxTools
+ 
+ from nightshift_core.config import Ceilings, Settings
+@@ -55,6 +55,16 @@ def make_suite(results: list[bool]) -> Callable[..., TestReport]:
+     return run_suite
+ 
+ 
++def no_drift(sandbox: Sandbox, vulnerabilities: object) -> list[UpgradeDrift]:
++    """The upgrade is still installed.
++
++    Injected into the tests below because they are about control flow — attempts,
++    ceilings, what the agent is handed. Whether a green suite is *trustworthy* is
++    a separate question with its own file, tests/test_false_green.py.
++    """
++    return []
++
++
+ def failure(output: str = "ImportError") -> TestReport:
+     return TestReport(passed=False, output=output, duration_seconds=0.1)
+ 
+@@ -81,6 +91,7 @@ def test_a_repair_that_works_on_the_first_attempt(fixture_set: Fixtures) -> None
+     repaired = run_repair_loop(
+         job, sandbox, failure(), policy, budget, ScriptedAgent(),
+         tools=tools, run_suite=make_suite([True]),
++        check_drift=no_drift,
+     )
+     assert repaired is True
+     assert len(job.repair_attempts) == 1
+@@ -92,6 +103,7 @@ def test_the_loop_stops_at_the_attempt_ceiling(fixture_set: Fixtures) -> None:
+     repaired = run_repair_loop(
+         job, sandbox, failure(), policy, budget, ScriptedAgent(),
+         tools=tools, run_suite=make_suite([False, False, False, False]),
++        check_drift=no_drift,
+     )
+     assert repaired is False
+     assert len(job.repair_attempts) == 3, "ceilings.max_repair_attempts is 3"
+@@ -103,6 +115,7 @@ def test_every_attempt_is_recorded_even_when_it_fails(fixture_set: Fixtures) ->
+     run_repair_loop(
+         job, sandbox, failure(), policy, budget, ScriptedAgent(),
+         tools=tools, run_suite=make_suite([False, True]),
++        check_drift=no_drift,
+     )
+     assert [a.tests_passed for a in job.repair_attempts] == [False, True]
+     assert all(a.rationale for a in job.repair_attempts)
+@@ -114,6 +127,7 @@ def test_the_agent_sees_the_previous_failure_not_the_original(fixture_set: Fixtu
+     run_repair_loop(
+         job, sandbox, failure("first failure"), policy, budget, agent,
+         tools=tools, run_suite=make_suite([False, True]),
++        check_drift=no_drift,
+     )
+     assert agent.contexts[0].failing_output == "first failure"
+     assert agent.contexts[1].failing_output == "boom", "attempt 2 sees attempt 1's result"
+@@ -125,6 +139,7 @@ def test_tokens_are_spent_against_the_budget(fixture_set: Fixtures) -> None:
+     run_repair_loop(
+         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(tokens=1500),
+         tools=tools, run_suite=make_suite([False, True]),
++        check_drift=no_drift,
+     )
+     assert budget.tokens == 3000
+     assert job.tokens_used == 3000
+@@ -136,6 +151,7 @@ def test_the_token_ceiling_ends_the_loop(fixture_set: Fixtures) -> None:
+     repaired = run_repair_loop(
+         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(tokens=60_000),
+         tools=tools, run_suite=make_suite([False, False, False]),
++        check_drift=no_drift,
+     )
+     assert repaired is False
+     assert len(job.repair_attempts) == 2, "the third attempt exceeds max_job_tokens"
+@@ -146,6 +162,7 @@ def test_a_diff_is_recorded_on_each_attempt(fixture_set: Fixtures) -> None:
+     run_repair_loop(
+         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(),
+         tools=tools, run_suite=make_suite([True]),
++        check_drift=no_drift,
+         capture=lambda sandbox: "diff --git a/app.py b/app.py\n+# attempt 1\n",
+     )
+     assert "attempt 1" in job.repair_attempts[0].diff
+@@ -157,6 +174,7 @@ def test_the_job_is_never_finished_by_the_loop(fixture_set: Fixtures) -> None:
+     run_repair_loop(
+         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(),
+         tools=tools, run_suite=make_suite([True]),
++        check_drift=no_drift,
+     )
+     assert job.outcome is None
+     assert job.phase is not None
+diff --git a/tests/test_worker_handle.py b/tests/test_worker_handle.py
+index c45c74c..2c9328f 100644
+--- a/tests/test_worker_handle.py
++++ b/tests/test_worker_handle.py
+@@ -81,6 +81,10 @@ def patched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> pytest.MonkeyPat
+     )
+     # capture_diff is resolved inside services.worker.repair, not here.
+     monkeypatch.setattr("services.worker.repair.capture_diff", lambda sandbox: "")
++    # The upgrade-drift check reads real installed versions out of a real
++    # interpreter. Stubbed to "intact" here because these tests are about the
++    # phase machine; drift has its own file, tests/test_false_green.py.
++    monkeypatch.setattr("services.worker.repair.upgrade_drift", lambda sandbox, vulns: [])
+     return monkeypatch
+ 
+ 
+-- 
+2.43.0
+

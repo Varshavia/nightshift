@@ -81,6 +81,10 @@ def patched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> pytest.MonkeyPat
     )
     # capture_diff is resolved inside services.worker.repair, not here.
     monkeypatch.setattr("services.worker.repair.capture_diff", lambda sandbox: "")
+    # The upgrade-drift check reads real installed versions out of a real
+    # interpreter. Stubbed to "intact" here because these tests are about the
+    # phase machine; drift has its own file, tests/test_false_green.py.
+    monkeypatch.setattr("services.worker.repair.upgrade_drift", lambda sandbox, vulns: [])
     return monkeypatch
 
 

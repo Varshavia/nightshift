@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from services.worker.repair import RepairContext, RepairProposal, run_repair_loop
-from services.worker.toolchain import Sandbox, TestReport
+from services.worker.toolchain import Sandbox, TestReport, UpgradeDrift
 from services.worker.tools import SandboxTools
 
 from nightshift_core.config import Ceilings, Settings
@@ -55,6 +55,16 @@ def make_suite(results: list[bool]) -> Callable[..., TestReport]:
     return run_suite
 
 
+def no_drift(sandbox: Sandbox, vulnerabilities: object) -> list[UpgradeDrift]:
+    """The upgrade is still installed.
+
+    Injected into the tests below because they are about control flow — attempts,
+    ceilings, what the agent is handed. Whether a green suite is *trustworthy* is
+    a separate question with its own file, tests/test_false_green.py.
+    """
+    return []
+
+
 def failure(output: str = "ImportError") -> TestReport:
     return TestReport(passed=False, output=output, duration_seconds=0.1)
 
@@ -81,6 +91,7 @@ def test_a_repair_that_works_on_the_first_attempt(fixture_set: Fixtures) -> None
     repaired = run_repair_loop(
         job, sandbox, failure(), policy, budget, ScriptedAgent(),
         tools=tools, run_suite=make_suite([True]),
+        check_drift=no_drift,
     )
     assert repaired is True
     assert len(job.repair_attempts) == 1
@@ -92,6 +103,7 @@ def test_the_loop_stops_at_the_attempt_ceiling(fixture_set: Fixtures) -> None:
     repaired = run_repair_loop(
         job, sandbox, failure(), policy, budget, ScriptedAgent(),
         tools=tools, run_suite=make_suite([False, False, False, False]),
+        check_drift=no_drift,
     )
     assert repaired is False
     assert len(job.repair_attempts) == 3, "ceilings.max_repair_attempts is 3"
@@ -103,6 +115,7 @@ def test_every_attempt_is_recorded_even_when_it_fails(fixture_set: Fixtures) -> 
     run_repair_loop(
         job, sandbox, failure(), policy, budget, ScriptedAgent(),
         tools=tools, run_suite=make_suite([False, True]),
+        check_drift=no_drift,
     )
     assert [a.tests_passed for a in job.repair_attempts] == [False, True]
     assert all(a.rationale for a in job.repair_attempts)
@@ -114,6 +127,7 @@ def test_the_agent_sees_the_previous_failure_not_the_original(fixture_set: Fixtu
     run_repair_loop(
         job, sandbox, failure("first failure"), policy, budget, agent,
         tools=tools, run_suite=make_suite([False, True]),
+        check_drift=no_drift,
     )
     assert agent.contexts[0].failing_output == "first failure"
     assert agent.contexts[1].failing_output == "boom", "attempt 2 sees attempt 1's result"
@@ -125,6 +139,7 @@ def test_tokens_are_spent_against_the_budget(fixture_set: Fixtures) -> None:
     run_repair_loop(
         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(tokens=1500),
         tools=tools, run_suite=make_suite([False, True]),
+        check_drift=no_drift,
     )
     assert budget.tokens == 3000
     assert job.tokens_used == 3000
@@ -136,6 +151,7 @@ def test_the_token_ceiling_ends_the_loop(fixture_set: Fixtures) -> None:
     repaired = run_repair_loop(
         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(tokens=60_000),
         tools=tools, run_suite=make_suite([False, False, False]),
+        check_drift=no_drift,
     )
     assert repaired is False
     assert len(job.repair_attempts) == 2, "the third attempt exceeds max_job_tokens"
@@ -146,6 +162,7 @@ def test_a_diff_is_recorded_on_each_attempt(fixture_set: Fixtures) -> None:
     run_repair_loop(
         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(),
         tools=tools, run_suite=make_suite([True]),
+        check_drift=no_drift,
         capture=lambda sandbox: "diff --git a/app.py b/app.py\n+# attempt 1\n",
     )
     assert "attempt 1" in job.repair_attempts[0].diff
@@ -157,6 +174,7 @@ def test_the_job_is_never_finished_by_the_loop(fixture_set: Fixtures) -> None:
     run_repair_loop(
         job, sandbox, failure("boom"), policy, budget, ScriptedAgent(),
         tools=tools, run_suite=make_suite([True]),
+        check_drift=no_drift,
     )
     assert job.outcome is None
     assert job.phase is not None

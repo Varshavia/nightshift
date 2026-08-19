@@ -22,6 +22,7 @@ Four things it exists to guarantee:
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
+
+from packaging.utils import canonicalize_name
 
 from nightshift_core.config import Ceilings, Settings
 
@@ -92,17 +95,33 @@ class ToolCall:
 class Budget:
     """What the job has spent so far. The worker advances this; policy reads it.
 
-    ``elapsed_seconds`` is passed in rather than measured so that the engine
-    stays pure and the tests stay deterministic.
+    Time is *passed in* rather than measured here, so the engine stays pure and
+    the tests stay deterministic. But there is only one way to advance it —
+    :meth:`start` then :meth:`tick` — because the alternative was accumulating
+    per-attempt durations, and that silently excluded clone, environment build
+    and both full test runs. Those are the slowest phases of a job by a wide
+    margin: a repository that takes twenty-five minutes to install was entering
+    the repair loop with a wall-clock ceiling that had not started counting.
     """
 
     attempts: int = 0
     tokens: int = 0
     elapsed_seconds: float = 0.0
+    #: Monotonic origin of the job's wall clock. ``None`` until :meth:`start`.
+    started_at: float | None = None
 
-    def spend(self, *, tokens: int = 0, seconds: float = 0.0, attempts: int = 0) -> None:
+    def start(self, now: float) -> None:
+        """Begin the wall clock. Everything the job does after this counts."""
+        self.started_at = now
+
+    def tick(self, now: float) -> None:
+        """Refresh elapsed time. A no-op until the clock has been started."""
+        if self.started_at is not None:
+            self.elapsed_seconds = now - self.started_at
+
+    def spend(self, *, tokens: int = 0, attempts: int = 0) -> None:
+        """Record consumption that is counted rather than clocked."""
         self.tokens += tokens
-        self.elapsed_seconds += seconds
         self.attempts += attempts
 
 
@@ -152,6 +171,9 @@ DENIED_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
     {"merge", "rebase", "reset", "clean", "filter-branch", "gc", "config", "remote"}
 )
 
+#: Executables that can change what is installed in the sandbox.
+INSTALLERS: frozenset[str] = frozenset({"pip", "pip3", "uv", "poetry"})
+
 #: Hosts the sandbox may reach. Package indexes to install, OSV to re-check an
 #: advisory, GitHub to open the pull request. Nothing else.
 ALLOWED_HOSTS: frozenset[str] = frozenset(
@@ -172,6 +194,23 @@ PROTECTED_WRITE_PREFIXES: tuple[str, ...] = (".git/", ".github/", ".circleci/")
 PROTECTED_WRITE_FILES: frozenset[str] = frozenset(
     {".travis.yml", "azure-pipelines.yml", "Jenkinsfile", ".pre-commit-config.yaml"}
 )
+
+
+def _distribution_name(argument: str) -> str | None:
+    """The package name in a pip argument, or None if it is not one.
+
+    ``jinja2==2.11.3``, ``Jinja2[extra]>=3`` and poetry's ``jinja2@2.11.3`` all
+    yield ``jinja2``; a path like ``requirements.txt`` or ``.`` yields something
+    that will never match a protected name, which is the behaviour we want.
+
+    ``@`` is in the separator set for two reasons: poetry spells versions that
+    way, and PEP 508 direct references (``name @ https://...``) put the name
+    before it too.
+    """
+    head = re.split(r"[=<>!~@\[;\s]", argument, maxsplit=1)[0].strip()
+    if not head or head.startswith(".") or "/" in head or "\\" in head:
+        return None
+    return str(canonicalize_name(head))
 
 
 def _is_test_path(path: str) -> bool:
@@ -205,10 +244,17 @@ class PolicyEngine:
         settings: Settings | None = None,
         workspace: str = "/workspace/repo",
         ceilings: Ceilings | None = None,
+        protected_packages: Sequence[str] = (),
     ) -> None:
         self.settings = settings or Settings()
         self.ceilings = ceilings or self.settings.ceilings
         self.workspace = PurePosixPath(workspace)
+        #: Packages this job came to upgrade. The agent may not reinstall them at
+        #: a version of its own choosing — that is the one command that turns a
+        #: red suite green while leaving the advisory unfixed.
+        self.protected_packages = frozenset(
+            str(canonicalize_name(name)) for name in protected_packages
+        )
         self._audit: list[tuple[ToolCall, Decision]] = []
 
     # -- public API --------------------------------------------------------- #
@@ -382,6 +428,35 @@ class PolicyEngine:
             )
         if executable == "git":
             return self._check_git(argv, command_text)
+        if executable in INSTALLERS:
+            return self._check_installer(argv)
+        return Decision(Effect.ALLOW, "command-allowed")
+
+    def _check_installer(self, argv: list[str]) -> Decision:
+        """An installer may not touch the packages this job came to upgrade.
+
+        ``pip install -r requirements.txt`` stays allowed: the manifest already
+        carries the new pin, so reinstalling from it re-applies the upgrade
+        rather than undoing it. Naming the package directly is what is refused,
+        because the version then comes from the agent rather than the advisory.
+
+        This is a second line of defence, not the main one. The main one is
+        checking afterwards that the upgrade is still installed — an allowlist
+        can only forbid the routes we thought of.
+        """
+        if not self.protected_packages:
+            return Decision(Effect.ALLOW, "command-allowed")
+        for argument in argv[1:]:
+            if argument.startswith("-"):
+                continue
+            name = _distribution_name(argument)
+            if name and name in self.protected_packages:
+                return Decision(
+                    Effect.DENY,
+                    "no-downgrade",
+                    f"{name} is the package this job came to upgrade; reinstalling it "
+                    "by name would undo the fix the pull request claims to make",
+                )
         return Decision(Effect.ALLOW, "command-allowed")
 
     def _check_git(self, argv: list[str], command_text: str) -> Decision:
