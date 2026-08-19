@@ -37,7 +37,7 @@ from nightshift_core.fleet import (
     propose,
     save_pool,
 )
-from nightshift_core.github import GitHubClient, GitHubError, RepoMetadata
+from nightshift_core.github import GitHubClient, GitHubError, RateLimited, RepoMetadata
 from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
 
 log = logging.getLogger("nightshift.forkpool")
@@ -111,9 +111,18 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
         found = client.search_repositories(args.query, limit=args.search)
         log.info("assessing %d repositories", len(found))
         candidates: list[Candidate] = []
+        truncated = False
         for index, meta in enumerate(found, start=1):
             try:
                 candidates.append(assess(client, meta))
+            except RateLimited as exc:
+                # Stop the whole run rather than skipping this one. The quota is
+                # gone for everything that follows, and continuing would spend a
+                # hundred more requests learning nothing — while recording every
+                # remaining repository as having no tests and no pins.
+                log.error("%s", exc)
+                truncated = True
+                break
             except GitHubError as exc:
                 log.warning("skipping %s: %s", meta.full_name, exc)
             if index % 10 == 0:
@@ -129,6 +138,11 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
             {
                 "query": args.query,
                 "assessed": len(candidates),
+                "requested": len(found),
+                # A run cut short by a rate limit surveyed part of the world.
+                # Recorded so that a short list is not mistaken for a thorough
+                # search that found little.
+                "truncated": truncated,
                 "accepted": [
                     {
                         "repo": c.repo,
@@ -152,6 +166,12 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
         encoding="utf-8",
     )
 
+    if truncated:
+        print(
+            f"\nSTOPPED EARLY: assessed {len(candidates)} of {len(found)} before the rate "
+            "limit. This proposal is a partial survey, not a thorough one.",
+            file=sys.stderr,
+        )
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
         print(

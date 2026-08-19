@@ -15,7 +15,7 @@ import httpx
 import pytest
 from scripts.build_fork_pool import assess
 
-from nightshift_core.github import GitHubClient, GitHubError, RepoMetadata
+from nightshift_core.github import GitHubClient, GitHubError, RateLimited, RepoMetadata
 
 REPO_JSON = {
     "full_name": "org/service",
@@ -131,7 +131,7 @@ def test_a_rate_limit_is_reported_as_something_to_wait_out() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"message": "API rate limit exceeded for user"})
 
-    with pytest.raises(GitHubError, match="waiting is the correct response"):
+    with pytest.raises(RateLimited, match="waiting is the correct response"):
         _client(handler).get_repo("org/service")
 
 
@@ -283,3 +283,85 @@ def test_a_page_of_nothing_but_repeats_ends_the_search() -> None:
     found = _client(handler).search_repositories("language:python", limit=50)
     assert len(found) == 1
     assert calls == [1, 2]
+
+
+# --------------------------------------------------------------------------- #
+# Rate limits, all three ways GitHub says it
+# --------------------------------------------------------------------------- #
+
+
+def test_a_secondary_limit_answers_429_and_must_not_be_missed() -> None:
+    """The dangerous one. Earlier this was simply "not 200", so `list_paths`
+    returned an empty list and the repository was assessed as having no tests
+    and no dependencies — rejected for a reason nobody ever checked."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"message": "You have exceeded a secondary rate limit"})
+
+    with pytest.raises(RateLimited):
+        _client(handler).list_paths("org/service")
+
+
+def test_a_refused_tree_is_never_reported_as_a_repository_without_tests() -> None:
+    """Silent bad data is worse than no data."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"message": "secondary rate limit"})
+
+    with pytest.raises(RateLimited):
+        assess(_client(handler), RepoMetadata.from_api(REPO_JSON))
+
+
+def test_retry_after_is_carried_so_the_caller_knows_how_long() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403, headers={"retry-after": "60"}, json={"message": "API rate limit exceeded"}
+        )
+
+    with pytest.raises(RateLimited) as excinfo:
+        _client(handler).get_repo("org/service")
+    assert excinfo.value.retry_after_seconds == 60
+    assert "retry after 60s" in str(excinfo.value)
+
+
+def test_the_message_names_the_missing_token() -> None:
+    """The commonest cause by far, and the one with a one-line fix."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"message": "API rate limit exceeded"})
+
+    with pytest.raises(RateLimited, match="GITHUB_TOKEN"):
+        _client(handler).get_repo("org/service")
+
+
+def test_an_ordinary_403_is_not_a_rate_limit() -> None:
+    """A private repository or a token without scope is a per-repository
+    problem; treating it as a quota exhaustion would abandon the whole run."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"message": "Resource not accessible by integration"})
+
+    assert _client(handler).get_file("org/private", "requirements.txt") is None
+
+
+def test_a_rate_limit_stops_the_run_rather_than_skipping_a_repository() -> None:
+    """The quota is gone for everything that follows. Continuing spends a
+    hundred more requests learning nothing."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if len(seen) > 2:
+            return httpx.Response(429, json={"message": "secondary rate limit"})
+        if "/git/trees/" in request.url.path:
+            return httpx.Response(200, json={"tree": [{"path": "requirements.txt"}]})
+        return httpx.Response(200, json=_contents(REQUIREMENTS))
+
+    client = _client(handler)
+    metas = [RepoMetadata.from_api({**REPO_JSON, "full_name": f"org/r{n}"}) for n in range(10)]
+    assessed = []
+    with pytest.raises(RateLimited):
+        for meta in metas:
+            assessed.append(assess(client, meta))
+
+    assert len(assessed) == 1, "the run must stop, not carry on through the whole list"
