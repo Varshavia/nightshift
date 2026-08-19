@@ -25,6 +25,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from nightshift_core.config import Settings, get_settings
+from nightshift_core.fleet import load_pool
+from nightshift_core.github import GitHubClient
+from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
 from nightshift_core.models import Dependency, RepoJob, Severity, Vulnerability
 from nightshift_core.osv import OSVClient
 
@@ -50,19 +53,43 @@ def load_fleet(settings: Settings) -> Sequence[str]:
     Read from the fork pool built by ``scripts/build_fork_pool.py``, never from
     a wildcard search: the set of repositories we operate on is an explicit,
     reviewable list. See RESPONSIBLE_USE.md.
+
+    A missing pool raises rather than returning nothing, because a scan of zero
+    repositories and a quiet night look identical in the morning.
     """
-    raise NotImplementedError("scanner: load_fleet")
+    return load_pool(settings.fleet_pool_path).repos
 
 
-def read_manifests(repo: str) -> Sequence[Dependency]:
+def read_manifests(repo: str, client: GitHubClient | None = None) -> Sequence[Dependency]:
     """Pinned dependencies for one repository.
 
-    Reads the manifest through the GitHub contents API rather than cloning —
-    the scan touches hundreds of repositories and only the worker needs a
-    working tree. PyPI only, per ADR 0001, behind an adapter so a second
-    ecosystem is an addition rather than a rewrite.
+    Read through the GitHub contents API rather than by cloning: the scan
+    touches hundreds of repositories and wants two small files from each, while
+    only the worker needs a working tree. PyPI only, per ADR 0001, behind the
+    manifest adapter so a second ecosystem is an addition rather than a rewrite.
+
+    A dependency that appears in several manifests is returned once. The same
+    pin listed in ``requirements.txt`` and ``requirements/dev.txt`` is one
+    dependency, and counting it twice would double it in the OSV batch.
     """
-    raise NotImplementedError("scanner: read_manifests")
+    owned = client is None
+    client = client or GitHubClient(get_settings().github_token or "")
+    try:
+        found: list[Dependency] = []
+        seen: set[tuple[str, str]] = set()
+        for name in RECOGNISED_MANIFESTS:
+            text = client.get_file(repo, name)
+            if not text:
+                continue
+            for dependency in parse_manifest(text, name):
+                key = (dependency.name, dependency.version)
+                if key not in seen:
+                    seen.add(key)
+                    found.append(dependency)
+        return found
+    finally:
+        if owned:
+            client.close()
 
 
 def triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]:
