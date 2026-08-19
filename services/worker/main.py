@@ -25,6 +25,7 @@ fleet for free before a token is spent.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 from nightshift_core.config import Settings, get_settings
@@ -95,6 +96,7 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
     """Process one job to a terminal outcome. Checkpointed at every phase."""
     settings = settings or get_settings()
     budget = Budget()
+    budget.start(time.monotonic())
     workspace = Path(settings.workspace_root) / job.job_id.replace(":", "_").replace("/", "_")
 
     def checkpoint(phase: Phase) -> None:
@@ -116,7 +118,15 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
     # Built here, not before the clone: the engine judges paths against the real
     # workspace, and until the clone lands there is no real workspace to judge
     # against. Constructing it earlier made every local path look like an escape.
-    policy = PolicyEngine(settings=settings, workspace=repo_path.as_posix())
+    # The protected set is the packages this job came to upgrade. Passing it
+    # here rather than hard-coding a rule keeps the engine general: it refuses to
+    # let the agent reinstall *these* packages by name, and says nothing about
+    # any others.
+    policy = PolicyEngine(
+        settings=settings,
+        workspace=repo_path.as_posix(),
+        protected_packages=[v.package for v in job.vulnerabilities],
+    )
 
     checkpoint(Phase.BASELINE)
     try:
@@ -147,6 +157,10 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
 
     checkpoint(Phase.VERIFY)
     verified = run_tests(sandbox)
+    # Clone, build and two full suite runs happened before this line, and they
+    # are the slowest part of a job. The repair loop inherits the time they
+    # spent rather than starting from zero.
+    budget.tick(time.monotonic())
 
     repaired = False
     if not verified.passed:

@@ -17,16 +17,24 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from nightshift_core.models import RepairAttempt, RepoJob, Vulnerability
 from nightshift_core.policy import Budget, PolicyEngine, ToolCall
-from services.worker.toolchain import Sandbox, TestReport, capture_diff, run_tests
+from services.worker.toolchain import (
+    Sandbox,
+    TestReport,
+    UpgradeDrift,
+    capture_diff,
+    run_tests,
+    upgrade_drift,
+)
 from services.worker.tools import SandboxTools
 
 __all__ = [
+    "DRIFT_PREAMBLE",
     "RepairAgent",
     "RepairContext",
     "RepairProposal",
@@ -34,6 +42,15 @@ __all__ = [
 ]
 
 log = logging.getLogger("nightshift.repair")
+
+#: What the agent is told when it made the suite green by undoing the upgrade.
+#: Phrased as a failure because that is what it is — the job is not closer to
+#: done than it was before the attempt.
+DRIFT_PREAMBLE = (
+    "The suite passes, but the upgrade is no longer installed, so this proves "
+    "nothing. The upgrade is the point; the tests exist to show the calling code "
+    "survives it.\n"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +89,7 @@ def run_repair_loop(
     tools: SandboxTools | None = None,
     run_suite: Callable[..., TestReport] | None = None,
     capture: Callable[[Sandbox], str] | None = None,
+    check_drift: Callable[..., Sequence[UpgradeDrift]] | None = None,
 ) -> bool:
     """Repair until the suite is green or a ceiling is reached. True when green.
 
@@ -84,6 +102,7 @@ def run_repair_loop(
     # test would never reach it and the suite would quietly run for real.
     run_suite = run_suite or run_tests
     capture = capture or capture_diff
+    check_drift = check_drift or upgrade_drift
     failing_output = failure.output
 
     while True:
@@ -123,21 +142,39 @@ def run_repair_loop(
         verdict = run_suite(sandbox)
         duration = time.monotonic() - started
 
+        # A green suite is necessary and not sufficient. Every tool the agent has
+        # is gated, but the engine reasons about actions and there are more ways
+        # to change an environment than an allowlist can enumerate. So the
+        # outcome is checked directly: if the library we came to upgrade is not
+        # the version we upgraded it to, the suite passing means nothing.
+        drift = tuple(check_drift(sandbox, job.vulnerabilities)) if verdict.passed else ()
+        green = verdict.passed and not drift
+
         job.record_attempt(
             RepairAttempt(
                 attempt=attempt_number,
                 failing_output=failing_output,
                 diff=capture(sandbox),
                 rationale=proposal.rationale,
-                tests_passed=verdict.passed,
+                tests_passed=green,
                 tokens_used=proposal.tokens_used,
                 duration_seconds=duration,
             )
         )
-        budget.spend(tokens=proposal.tokens_used, seconds=duration, attempts=1)
+        budget.spend(tokens=proposal.tokens_used, attempts=1)
+        budget.tick(time.monotonic())
 
-        if verdict.passed:
+        if green:
             log.info("job %s repaired on attempt %d", job.job_id, attempt_number)
             return True
 
-        failing_output = verdict.output
+        if drift:
+            log.warning(
+                "job %s went green on attempt %d by undoing the upgrade: %s",
+                job.job_id,
+                attempt_number,
+                "; ".join(str(entry) for entry in drift),
+            )
+            failing_output = DRIFT_PREAMBLE + "\n".join(str(entry) for entry in drift)
+        else:
+            failing_output = verdict.output

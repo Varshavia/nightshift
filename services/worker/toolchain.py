@@ -19,6 +19,7 @@ be theatre, and worse, it would blur where the trust boundary actually is.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -26,6 +27,8 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 from nightshift_core.manifests import (
     RECOGNISED_MANIFESTS,
@@ -41,6 +44,7 @@ __all__ = [
     "EnvironmentBuildError",
     "Sandbox",
     "TestReport",
+    "UpgradeDrift",
     "UpgradeError",
     "apply_upgrade",
     "build_environment",
@@ -48,7 +52,9 @@ __all__ = [
     "clone",
     "diff_stats",
     "discover_manifests",
+    "installed_versions",
     "run_tests",
+    "upgrade_drift",
 ]
 
 log = logging.getLogger("nightshift.toolchain")
@@ -491,3 +497,98 @@ def diff_stats(diff: str) -> DiffStats:
         elif line.startswith("-") and not line.startswith("---"):
             removed += 1
     return DiffStats(files=files, added=added, removed=removed)
+
+
+# --------------------------------------------------------------------------- #
+# Verifying that the upgrade survived the repair
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True, slots=True)
+class UpgradeDrift:
+    """An upgraded package that is no longer at the version we upgraded it to."""
+
+    package: str
+    expected: str
+    installed: str | None
+
+    def __str__(self) -> str:
+        found = self.installed or "not installed"
+        return f"{self.package}: expected {self.expected}, found {found}"
+
+
+def installed_versions(sandbox: Sandbox, packages: Sequence[str]) -> dict[str, str | None]:
+    """What is actually importable in the sandbox right now.
+
+    Read from the environment rather than from the manifest, because the
+    manifest is what we wrote and the environment is what the tests ran against.
+    Those two can disagree, and when they do it is the environment that decides
+    whether a green suite means anything.
+    """
+    if not packages:
+        return {}
+    script = (
+        "import json\n"
+        "from importlib.metadata import PackageNotFoundError, version\n"
+        f"names = {list(packages)!r}\n"
+        "out = {}\n"
+        "for name in names:\n"
+        "    try:\n"
+        "        out[name] = version(name)\n"
+        "    except PackageNotFoundError:\n"
+        "        out[name] = None\n"
+        "print(json.dumps(out))\n"
+    )
+    result = sandbox.run([sandbox.python, "-c", script], timeout=120)
+    if result.returncode != 0:
+        log.warning("could not read installed versions: %s", _tail(result.stderr, 500))
+        return dict.fromkeys(packages)
+    try:
+        parsed: dict[str, str | None] = json.loads(result.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):  # pragma: no cover - defensive
+        return dict.fromkeys(packages)
+    return parsed
+
+
+def upgrade_drift(
+    sandbox: Sandbox, vulnerabilities: Sequence[Vulnerability]
+) -> list[UpgradeDrift]:
+    """Packages that are no longer at the fixed version. Empty means intact.
+
+    This is the check that makes a green suite mean something. Every tool the
+    repair agent has is gated by the policy engine, but the engine reasons about
+    *actions*, and there are more ways to change an environment than any
+    allowlist will ever enumerate — ``pip install`` at an older version being the
+    obvious one. So rather than trying to forbid each of them, the outcome is
+    verified directly: if the library we came to upgrade is not the version we
+    upgraded it to, the suite passing proves nothing at all.
+
+    Without this, an agent that runs ``pip install jinja2==2.11.3`` produces a
+    green suite, a manifest that claims 3.1.2, a PATCHED_REPAIRED outcome and an
+    open pull request — with the advisory still unfixed. The instruction tells it
+    not to. This project's whole argument is that an instruction is not a
+    guarantee.
+    """
+    expected = {v.package: v.fixed_version for v in vulnerabilities if v.fixed_version}
+    if not expected:
+        return []
+    found = installed_versions(sandbox, sorted(expected))
+    drift: list[UpgradeDrift] = []
+    for package, wanted in sorted(expected.items()):
+        actual = found.get(package)
+        if actual is None or _version_or_none(actual) != _version_or_none(wanted):
+            drift.append(UpgradeDrift(package=package, expected=wanted, installed=actual))
+    return drift
+
+
+def _version_or_none(raw: str) -> Version | str:
+    """Compare as versions where possible, as text otherwise.
+
+    ``3.1.2`` and ``3.1.2.post0`` are different releases and must not be treated
+    as equal, but ``1.0`` and ``1.0.0`` are the same one and must not be treated
+    as different.
+    """
+    try:
+        return Version(raw)
+    except InvalidVersion:
+        return raw
