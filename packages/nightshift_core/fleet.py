@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Self
 
 __all__ = [
+    "MAX_REPO_SIZE_KB",
     "MIN_PINNED_DEPENDENCIES",
     "PERMISSIVE_LICENCES",
     "POOL_SCHEMA",
@@ -56,6 +57,14 @@ PERMISSIVE_LICENCES: frozenset[str] = frozenset(
 #: judgement call; it is here as a constant so a fleet run can argue with it.
 MIN_PINNED_DEPENDENCIES = 3
 
+#: Repositories larger than this do not fit inside a job. Not an aesthetic
+#: preference: ``toolchain.INSTALL_TIMEOUT`` and ``TEST_TIMEOUT`` are fifteen
+#: minutes each, and projects of home-assistant's or superset's size exceed both
+#: before they have installed. Forking them would fill the pool with jobs that
+#: can only ever end UNBUILDABLE — an honest outcome, but a wasted night and a
+#: denominator full of repositories we never had a chance with.
+MAX_REPO_SIZE_KB = 50_000
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -70,6 +79,7 @@ class Candidate:
     license_id: str = ""
     archived: bool = False
     fork: bool = False
+    size_kb: int = 0
     has_tests: bool = False
     pinned_dependencies: int = 0
     manifests: tuple[str, ...] = ()
@@ -90,6 +100,7 @@ class FleetEntry:
     pinned_dependencies: int = 0
     manifests: tuple[str, ...] = ()
     has_tests: bool = True
+    size_kb: int = 0
     added_at: datetime = field(default_factory=_now)
     notes: str = ""
 
@@ -102,6 +113,7 @@ class FleetEntry:
             "pinned_dependencies": self.pinned_dependencies,
             "manifests": list(self.manifests),
             "has_tests": self.has_tests,
+            "size_kb": self.size_kb,
             "added_at": self.added_at.isoformat(),
             "notes": self.notes,
         }
@@ -116,6 +128,7 @@ class FleetEntry:
             pinned_dependencies=int(data.get("pinned_dependencies", 0)),
             manifests=tuple(data.get("manifests", ())),
             has_tests=bool(data.get("has_tests", True)),
+            size_kb=int(data.get("size_kb", 0)),
             added_at=datetime.fromisoformat(data["added_at"])
             if data.get("added_at")
             else _now(),
@@ -132,6 +145,7 @@ class FleetEntry:
             pinned_dependencies=candidate.pinned_dependencies,
             manifests=candidate.manifests,
             has_tests=candidate.has_tests,
+            size_kb=candidate.size_kb,
         )
 
 
@@ -205,6 +219,11 @@ def eligibility(candidate: Candidate) -> tuple[bool, str]:
         return False, "already a fork; the upstream is the interesting one"
     if not candidate.has_tests:
         return False, "no test suite, so nothing can serve as evidence of a repair"
+    if candidate.size_kb > MAX_REPO_SIZE_KB:
+        return False, (
+            f"{candidate.size_kb // 1000} MB; larger than a job's install and test "
+            "ceilings allow, so it could only ever end UNBUILDABLE"
+        )
     if candidate.pinned_dependencies < MIN_PINNED_DEPENDENCIES:
         return False, (
             f"{candidate.pinned_dependencies} exact pins; libraries declare ranges and "
