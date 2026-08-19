@@ -30,29 +30,40 @@ true?", and a status block alone loses the reasoning.
 
 ## NOW
 
-**Last updated:** 2026-08-19 · Claude (Suat's session)
+**Last updated:** 2026-08-19 (evening) · Claude, in Suat's session
 
 | | |
 |---|---|
-| **Branch** | `feat/migration-ledger`, pushed. `main` carries PRs #3, #4, #5 — Block 1, the toolchain fix, and the false-green hardening. |
-| **Check** | **Green. 238 tests**, ruff clean, `mypy --strict` clean over 42 files. |
-| **Block 1** | Code complete and merged. **Still not finished**: nobody has watched `make run-local` open a real pull request. See below. |
-| **Block 2** | Started. The Ledger domain, three-tier retrieval and promotion are implemented and tested with no cloud. The Librarian, Memory Bank and Firestore adapters, and OTel spans are not. |
-| **Next action** | The live run. It is now blocked on two concrete things, both outside this session (see *Blocked on*). While they land: telemetry, then the Librarian's seams. |
+| **Branch** | `main`, everything merged through PR #13. |
+| **Check** | **Green. 356 tests**, ruff clean, `mypy --strict` clean over 51 files. |
+| **Block 1** | Code complete. **Still not finished** — nobody has watched a real pull request open. |
+| **Block 2** | Ledger, three-tier retrieval, promotion, telemetry and the Librarian are all built and wired. None of it has run against a model. |
+| **Fork pool** | Builder works. Last run: 150 assessed, **14 usable candidates**, written to `fleet/candidates.json`. Nothing forked yet. |
+| **Next action** | Review `fleet/candidates.json`, fork, run the probe. All three are model-free and would close most of Block 1 today. |
 
-**Blocked on**
+**The one number nobody has yet:** what fraction of security upgrades break the
+calling code. `scripts/probe_fleet.py` measures it, costs zero tokens, and needs
+only the fork pool. Everything in the demo rests on it.
 
-- **A fork to point at.** `NIGHTSHIFT_FORK_ORG` is unset and there is no fork
-  pool. The `GITHUB_TOKEN` in `.env` is scoped to `Varshavia/nightshift` only,
-  so it cannot fork or create repositories. Fork one suitable repository by
-  hand, then add it to the token's selected repositories.
-- **Model access.** Credit requested 19 Aug, not yet granted. Note that a
-  `PATCHED_CLEAN` run calls **no model at all** — clone, build, baseline,
-  upgrade, verify and PR are entirely model-free. A live run on a repository
-  whose upgrade does not break the suite would close most of Block 1 today,
-  without Gemini.
+**Blocked on model access.** The $150 credit was requested on 19 Aug and has not
+arrived. It blocks the live repair loop, the Librarian, Gemma triage — and the
+cost curve, which is the demo's headline. **If it has not arrived by 22 Aug, use
+a personal Gemini API key instead.** The free tier covers the first runs. Waiting
+until the 26th and then discovering there is no model access would cost us the
+most compelling part of the submission, and that is a schedule risk rather than
+a technical one.
 
-**Cut line: 27 August.** Unchanged.
+**Not started at all:** the dashboard (nothing, not even a skeleton), the GCP
+deployment (`deploy.sh` written, never once executed — and the rubric explicitly
+asks for visible Cloud deployment proof), Block 3 governance (Registry, four IAM
+identities, Model Armor, Reviewer), and everything in Block 4 (video, write-up,
+social post, Devpost form).
+
+**Suggested order, most important first:** live run → GCP deploy → video →
+dashboard → Block 3 governance. Governance helps the category score, but it is a
+layer on top of a working system, and ours has not been seen working yet.
+
+**Cut line: 27 August.** Eight days. Unchanged.
 
 ### How to pick this up cold
 
@@ -88,6 +99,54 @@ STATUS banner and ticked checkboxes showing exactly what landed).
 ---
 
 ## Log
+
+### 2026-08-19 (evening) · Claude · Block 2 built, fork pool working, nothing run yet
+
+**Built, in order:** the Ledger domain and three-tier retrieval; telemetry, where
+the cost curve is a query over span attributes rather than a spreadsheet kept
+beside the run; the Ledger wired into the worker; the Librarian; the fork pool
+builder. Roughly 120 tests added.
+
+**Three decisions worth arguing with:**
+
+- **A clean upgrade never consults the Ledger.** It has nothing to look up, and a
+  hit recorded there would put a repository on the cost curve that never needed
+  the Ledger, flattering every tier.
+- **The Ledger works without Memory Bank.** Exact retrieval is a key lookup and
+  Firestore does that. Memory Bank only improves the *near* tier, by finding an
+  adjacent transition semantically. `RecordBackedRecall` is the floor, not a stub.
+- **The Librarian cannot reach a repository, by signature.** No function in that
+  module accepts a `Sandbox`, a `Path` or a tool; the test checks annotations
+  rather than source text. IAM will enforce the same boundary in Block 3.
+
+**Four bugs found by running things rather than reading them.** This keeps being
+the pattern and it is worth internalising:
+
+1. **`GitHubClient` dropped the token when a client was injected.** Production was
+   fine; tests and any caller sharing a connection pool made unauthenticated
+   requests and would have learned about it through a rate limit, not an error.
+2. **GitHub's search pagination is not stable.** Star counts tie constantly, so
+   page two returns part of page one. Of 150 results about a third were repeats,
+   each costing two requests to assess twice. Deduplicated at the search and
+   again at the proposal.
+3. **429 was not handled at all** — the dangerous one. A refused tree request was
+   simply "not 200", so `list_paths` returned `[]` and the repository was assessed
+   as having no tests and no pins. Silently wrong data, rejected for a reason
+   nobody checked. Now `RateLimited` stops the whole run.
+4. **`span()` swallowed the caller's exception**, because the tracer call was
+   wrapped in a `try`. Telemetry may hide its own failures, never the job's.
+
+**The fork pool's selection rule is now entirely evidence-based, and both pieces
+of evidence came from real runs.** Libraries declare ranges, so they have no
+version to ask OSV about (measured on `itsdangerous` and `tenacity`). And the
+first proposal returned seven usable repositories of which every one —
+`home-assistant/core`, `apache/superset` — was far larger than a fifteen-minute
+install and test could handle. Hence `MAX_REPO_SIZE_KB` and a query bounded at
+both ends.
+
+**Left deliberately undone:** `build_librarian` still raises. It is one line to
+wire once a model exists, and wiring it before then would only produce a stub
+that lies about being ready.
 
 ### 2026-08-19 · Claude (Suat's session) · Hardening, then the Ledger domain
 
