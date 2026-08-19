@@ -365,3 +365,42 @@ def test_a_rate_limit_stops_the_run_rather_than_skipping_a_repository() -> None:
             assessed.append(assess(client, meta))
 
     assert len(assessed) == 1, "the run must stop, not carry on through the whole list"
+
+
+def test_forking_without_an_organisation_omits_the_field() -> None:
+    """GitHub expresses "my own account" by leaving the field out, not by
+    naming a user. Sending an empty organisation would be rejected."""
+    bodies: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.read())
+        return httpx.Response(202, json={"full_name": "me/service"})
+
+    assert _client(handler).fork("org/service") == "me/service"
+    assert bodies[0] in (b"{}", b"null", b"")
+
+
+def test_forking_into_an_organisation_names_it() -> None:
+    bodies: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.read())
+        return httpx.Response(202, json={"full_name": "ns-fleet/service"})
+
+    _client(handler).fork("org/service", organization="ns-fleet")
+    assert b"ns-fleet" in bodies[0]
+
+
+def test_whoami_names_the_account_the_token_belongs_to() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"login": "varshavia"})
+
+    assert _client(handler).whoami() == "varshavia"
+
+
+def test_whoami_says_what_is_missing_when_it_cannot_ask() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Requires authentication"})
+
+    with pytest.raises(GitHubError, match="token"):
+        _client(handler).whoami()

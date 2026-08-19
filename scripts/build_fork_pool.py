@@ -208,9 +208,18 @@ def run_fork(args: argparse.Namespace, token: str) -> int:
 
     entries: list[FleetEntry] = []
     with GitHubClient(token) as client:
+        # Resolved once. Without an organisation the forks land in the token
+        # holder's account, and we need its name to recognise repositories the
+        # pool already has.
+        owner = args.org or client.whoami()
+        if not owner:
+            print("could not determine where to fork to", file=sys.stderr)
+            return 2
+        log.info("forking into %s", owner)
+
         for entry in keeping:
             upstream = str(entry["repo"])
-            target = f"{args.org}/{upstream.split('/')[1]}"
+            target = f"{owner}/{upstream.split('/')[1]}"
             if target in already:
                 log.info("%s is already in the pool", target)
                 continue
@@ -257,7 +266,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     forker = sub.add_parser("fork", help="fork what a human marked keep=true")
     forker.add_argument("--from", dest="source", default="fleet/candidates.json")
-    forker.add_argument("--org", required=True, help="organisation the forks will live in")
+    forker.add_argument(
+        "--org",
+        default="",
+        help="organisation the forks will live in; omit to fork to your own account",
+    )
     forker.add_argument("--pool", default="fleet/pool.json")
     forker.add_argument("--dry-run", action="store_true")
 
