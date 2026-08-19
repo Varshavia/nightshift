@@ -39,6 +39,7 @@ from nightshift_core.models import Outcome
 __all__ = [
     "CONFIRMATIONS_FOR_VERIFIED",
     "Evidence",
+    "FirestoreRecordStore",
     "InMemoryRecall",
     "InMemoryRecordStore",
     "LedgerHit",
@@ -47,8 +48,10 @@ __all__ = [
     "MigrationScope",
     "Recipe",
     "RecipeStatus",
+    "RecordBackedRecall",
     "RecordStore",
     "Retrieval",
+    "build_ledger",
 ]
 
 #: Independent confirmations required before a recipe is trusted as prior art.
@@ -59,6 +62,9 @@ __all__ = [
 #: coincidence gets promoted, too high and nothing is ever verified inside a
 #: fleet of three hundred.
 CONFIRMATIONS_FOR_VERIFIED = 2
+
+#: Firestore collection holding the ledger of record.
+_COLLECTION = "nightshift_ledger"
 
 
 def _now() -> datetime:
@@ -363,6 +369,98 @@ class InMemoryRecordStore:
 
     def all(self) -> list[Recipe]:
         return sorted(self._records.values(), key=lambda r: r.first_seen)
+
+
+class RecordBackedRecall:
+    """Recall served from the ledger of record. No Memory Bank required.
+
+    Worth being clear about what Memory Bank actually buys, because it is easy
+    to assume the Ledger cannot work without it: exact retrieval is a key
+    lookup, and a key lookup is something Firestore does perfectly well. What
+    Memory Bank adds is *semantic* similarity for the near tier — finding that a
+    recipe about one transition is relevant to a neighbouring one by meaning
+    rather than by version arithmetic.
+
+    So this is the fleet's floor, not a stub. The three-tier path runs today on
+    Firestore alone; wiring Memory Bank in later improves tier two and changes
+    nothing else. A preview API being unavailable degrades the near tier, which
+    is what the spec asks for — it must never stop a run.
+    """
+
+    def __init__(self, records: RecordStore) -> None:
+        self._records = records
+
+    def write(self, recipe: Recipe) -> None:
+        self._records.put(recipe)
+
+    def exact(self, scope: MigrationScope) -> Recipe | None:
+        return self._records.get(scope.key)
+
+    def near(self, scope: MigrationScope) -> Recipe | None:
+        candidates = [
+            recipe
+            for recipe in self._records.all()
+            if recipe.scope.library == scope.library and recipe.scope.key != scope.key
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda r: (r.verified, r.confirmations, r.last_confirmed or r.first_seen),
+            reverse=True,
+        )
+        return candidates[0]
+
+
+class FirestoreRecordStore:
+    """The ledger of record. Client built lazily, so importing costs nothing.
+
+    Same shape as :class:`~nightshift_core.store.FirestoreJobStore` and for the
+    same reason: the domain must import on a laptop with no credentials, and CI
+    proves it on every push.
+    """
+
+    def __init__(self, *, project: str, database: str = "(default)") -> None:
+        self._project = project
+        self._database = database
+        self._client: Any | None = None
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            from google.cloud import firestore
+
+            self._client = firestore.Client(project=self._project, database=self._database)
+        return self._client
+
+    def get(self, key: str) -> Recipe | None:
+        snapshot = self.client.collection(_COLLECTION).document(key).get()
+        if not snapshot.exists:
+            return None
+        return Recipe.from_dict(snapshot.to_dict())
+
+    def put(self, recipe: Recipe) -> None:
+        self.client.collection(_COLLECTION).document(recipe.scope.key).set(recipe.to_dict())
+
+    def all(self) -> list[Recipe]:
+        documents = self.client.collection(_COLLECTION).stream()
+        return [Recipe.from_dict(doc.to_dict()) for doc in documents]
+
+
+def build_ledger(
+    *, project: str = "", database: str = "(default)", recall: MemoryRecall | None = None
+) -> MigrationLedger:
+    """The Ledger a worker should use, given what is available.
+
+    With a project, the record is Firestore. Without one — a laptop, a test, a
+    probe run — it is in memory, and the same code path is exercised. Recall
+    defaults to being served from whichever record store that is.
+    """
+    records: RecordStore = (
+        FirestoreRecordStore(project=project, database=database)
+        if project
+        else InMemoryRecordStore()
+    )
+    return MigrationLedger(recall=recall or RecordBackedRecall(records), records=records)
 
 
 # --------------------------------------------------------------------------- #
