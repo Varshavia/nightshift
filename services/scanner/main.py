@@ -6,11 +6,11 @@ scan open and a crash costs one night's scan rather than one night's work.
 
 Shape of a run:
 
-    load fleet          which repositories are ours to touch
-    read manifests      pinned dependencies, per repository      [stub]
+    load fleet          which repositories are ours to touch          [stub]
+    read manifests      pinned dependencies, per repository            [stub]
     query OSV           one batched request for the whole fleet  [implemented]
-    triage with Gemma   drop the noise before it costs Gemini    [stub]
-    publish             one Pub/Sub message per affected repo    [stub]
+    triage              severity floor now; the Gemma pass in Block 3  [partial]
+    publish             one Pub/Sub message per affected repo          [stub]
 
 Everything marked ``[stub]`` raises ``NotImplementedError`` on purpose. A stub
 that returns an empty list would make a broken scan look like a quiet night,
@@ -73,8 +73,21 @@ def triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]:
     something exploitable — is small, and doing it on the expensive model for
     every advisory in a 300-repository fleet is how a $150 credit disappears
     before the first repair.
+
+    Block 1 implements the deterministic half only: the severity floor, and the
+    "is there anything to upgrade to" check. The Gemma pass that judges whether
+    an advisory plausibly reaches a given codebase is Block 3 — it needs Vertex,
+    and gating local development on a credential would be the wrong trade.
+
+    Order is preserved. The scanner pairs these back to dependencies by
+    ``(package, version)`` and a reordering here would not break that, but it
+    would make a scan's logs harder to read against its input.
     """
-    raise NotImplementedError("scanner: triage")
+    return [
+        vulnerability
+        for vulnerability in vulnerabilities
+        if vulnerability.actionable and vulnerability.severity.rank >= TRIAGE_FLOOR.rank
+    ]
 
 
 def publish(job: RepoJob, settings: Settings) -> str:

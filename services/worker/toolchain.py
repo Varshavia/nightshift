@@ -37,13 +37,16 @@ from nightshift_core.manifests import (
 from nightshift_core.models import Dependency, Vulnerability
 
 __all__ = [
+    "DiffStats",
     "EnvironmentBuildError",
     "Sandbox",
     "TestReport",
     "UpgradeError",
     "apply_upgrade",
     "build_environment",
+    "capture_diff",
     "clone",
+    "diff_stats",
     "discover_manifests",
     "run_tests",
 ]
@@ -76,6 +79,10 @@ class UpgradeError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class TestReport:
     """One invocation of the repository's own test suite."""
+
+    #: Not a test class. The name is right for the domain and wrong for pytest's
+    #: collector, which would otherwise warn on every module that imports it.
+    __test__ = False
 
     passed: bool
     output: str
@@ -437,3 +444,50 @@ def apply_upgrade(sandbox: Sandbox, vulnerabilities: Sequence[Vulnerability]) ->
                 "the fixed versions would not install:\n" + _tail(result.stderr, 4000)
             )
     return changed
+
+
+# --------------------------------------------------------------------------- #
+# Diff
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True, slots=True)
+class DiffStats:
+    """Size of a repair, for the pull-request body and for the record.
+
+    A small diff that is obviously right is worth more than a large one that
+    happens to pass, so this number is reported rather than merely logged.
+    """
+
+    files: int = 0
+    added: int = 0
+    removed: int = 0
+
+
+def capture_diff(sandbox: Sandbox) -> str:
+    """Every change in the clone against HEAD, including new files.
+
+    ``git add -N`` stages the *existence* of untracked files without their
+    content, which is what makes them visible to ``git diff``. Without it a
+    repair that adds a file would produce an empty diff and the pull request
+    would understate what it is asking a human to approve.
+    """
+    sandbox.run(["git", "add", "-N", "."], timeout=60)
+    result = sandbox.run(["git", "diff", "--no-color"], timeout=60)
+    if result.returncode != 0:
+        log.warning("git diff failed: %s", _tail(result.stderr, 500))
+        return ""
+    return _tail(result.stdout or "")
+
+
+def diff_stats(diff: str) -> DiffStats:
+    """Count files and changed lines in a unified diff."""
+    files = added = removed = 0
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            files += 1
+        elif line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return DiffStats(files=files, added=added, removed=removed)

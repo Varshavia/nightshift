@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import argparse
 import logging
+import tempfile
 import uuid
 from collections.abc import Sequence
+from pathlib import Path
 
-from services.scanner.main import read_manifests, triage
+from services.scanner.main import triage
 from services.worker.main import handle
+from services.worker.toolchain import clone, read_dependencies
 
 from nightshift_core.config import get_settings
 from nightshift_core.models import RepoJob
@@ -32,9 +35,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
     settings = get_settings()
 
-    dependencies = read_manifests(args.repo)
+    # Read the pins from a throwaway clone rather than through the GitHub
+    # contents API. It costs a second locally and reuses `read_dependencies`,
+    # which is already tested; the scanner's API-based read only earns its keep
+    # in Block 2, where three hundred repositories must be read without cloning
+    # any of them.
+    with tempfile.TemporaryDirectory() as scratch:
+        repo_path = clone(args.repo, Path(scratch), token=settings.github_token)
+        dependencies = read_dependencies(repo_path)
+
     with OSVClient() as osv:
-        vulnerabilities = list(triage(osv.find_vulnerabilities(list(dependencies))))
+        vulnerabilities = list(triage(osv.find_vulnerabilities(dependencies)))
 
     if not vulnerabilities:
         print(f"{args.repo}: nothing to fix")

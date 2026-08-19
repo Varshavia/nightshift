@@ -31,6 +31,9 @@ from nightshift_core.config import Settings, get_settings
 from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import JobStore
+from services.worker.agent import build_repair_agent
+from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
+from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
     EnvironmentBuildError,
     Sandbox,
@@ -46,7 +49,12 @@ log = logging.getLogger("nightshift.worker")
 
 
 def repair(
-    job: RepoJob, sandbox: Sandbox, failure: TestReport, policy: PolicyEngine, budget: Budget
+    job: RepoJob,
+    sandbox: Sandbox,
+    failure: TestReport,
+    policy: PolicyEngine,
+    budget: Budget,
+    agent: RepairAgent,
 ) -> bool:
     """Run the bounded repair loop. True when the suite ends green.
 
@@ -55,26 +63,39 @@ def repair(
     :class:`~nightshift_core.models.RepairAttempt` whether or not it worked.
 
     The only place in the worker where a model is called, and the only place
-    with a ceiling on attempts, wall-clock and tokens.
+    with a ceiling on attempts, wall-clock and tokens. The implementation lives
+    in ``repair.py`` so that the loop can be tested with a scripted agent and no
+    token spent; this stays as the worker's own vocabulary.
     """
-    raise NotImplementedError("worker: repair")
+    return run_repair_loop(job, sandbox, failure, policy, budget, agent)
 
 
-def open_pull_request(job: RepoJob, sandbox: Sandbox, policy: PolicyEngine) -> str:
+def open_pull_request(
+    job: RepoJob, sandbox: Sandbox, policy: PolicyEngine, settings: Settings | None = None
+) -> str:
     """Open the PR from ``templates/pr_body.md``. Returns its url.
 
     The body carries the advisory, the version transition, the repair diff, the
     agent's explanation, and the AI-authorship disclosure. Nothing merges itself.
     """
-    raise NotImplementedError("worker: open_pull_request")
+    settings = settings or get_settings()
+    client = PyGithubClient(settings.github_token or "")
+    return open_pr(
+        job,
+        sandbox,
+        policy,
+        settings,
+        client,
+        baseline_green=bool(job.baseline_green),
+        model=settings.repair_model,
+    )
 
 
 def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> RepoJob:
     """Process one job to a terminal outcome. Checkpointed at every phase."""
     settings = settings or get_settings()
-    policy = PolicyEngine(settings=settings)
     budget = Budget()
-    workspace = Path("/workspace") / job.job_id.replace(":", "_").replace("/", "_")
+    workspace = Path(settings.workspace_root) / job.job_id.replace(":", "_").replace("/", "_")
 
     def checkpoint(phase: Phase) -> None:
         job.advance(phase)
@@ -91,6 +112,11 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
         repo_path = clone(job.repo, workspace, token=settings.github_token)
     except EnvironmentBuildError as exc:
         return finish(Outcome.INFRA_ERROR, notes=f"clone failed: {exc}"[:500])
+
+    # Built here, not before the clone: the engine judges paths against the real
+    # workspace, and until the clone lands there is no real workspace to judge
+    # against. Constructing it earlier made every local path look like an escape.
+    policy = PolicyEngine(settings=settings, workspace=repo_path.as_posix())
 
     checkpoint(Phase.BASELINE)
     try:
@@ -125,14 +151,22 @@ def handle(job: RepoJob, store: JobStore, settings: Settings | None = None) -> R
     repaired = False
     if not verified.passed:
         checkpoint(Phase.REPAIR)
-        repaired = repair(job, sandbox, verified, policy, budget)
+        # Built here rather than at the top of ``handle``: a PATCHED_CLEAN job
+        # never reaches this line, and it should never pay to construct an agent
+        # it will not use.
+        repaired = repair(job, sandbox, verified, policy, budget, build_repair_agent(settings))
         if not repaired:
             return finish(
                 Outcome.REPAIR_EXHAUSTED, notes="ceiling reached with the suite still red"
             )
 
     checkpoint(Phase.OPENING_PR)
-    pr_url = open_pull_request(job, sandbox, policy)
+    try:
+        pr_url = open_pull_request(job, sandbox, policy, settings)
+    except PullRequestBlocked as exc:
+        # A refusal here is one the job cannot proceed past — unlike a denied
+        # tool call inside the repair loop, which the agent can recover from.
+        return finish(Outcome.POLICY_BLOCKED, notes=str(exc)[:500])
     return finish(
         Outcome.PATCHED_REPAIRED if repaired else Outcome.PATCHED_CLEAN, pr_url=pr_url
     )
