@@ -30,19 +30,29 @@ true?", and a status block alone loses the reasoning.
 
 ## NOW
 
-**Last updated:** 2026-08-19 · Etka
+**Last updated:** 2026-08-19 · Claude (Suat's session)
 
 | | |
 |---|---|
-| **Branch** | `feat/repair-loop`, **pushed**. Branched off `docs/migration-ledger`, which is also pushed. **No PRs opened yet** — deliberate. `main` still at 14 commits. |
-| **Check** | **Green. 176 tests**, ruff clean, `mypy --strict` clean over 39 files. Run it with `.venv/bin/python -m pytest`. |
-| **Block 1** | **All 7 tasks implemented, committed, pushed.** Repair loop, policy-gated tools, diff capture, PR body, PR opening, ADK agent, triage, end-to-end wiring. |
-| **Block 1 remaining** | **The live run.** Nobody has watched `make run-local` open a real pull request. It needs a `GITHUB_TOKEN` and a fork to point at, and `scripts/build_fork_pool.py` is still a stub. **Do not call Block 1 finished until a human has seen the PR.** |
-| **Next action** | Either (a) build a small fork pool and do the live run, closing Block 1 honestly, or (b) start Block 2 — the Ledger. (a) first if you have a GitHub token; the whole design rests on the loop working in the wild. |
+| **Branch** | `feat/migration-ledger`, pushed. `main` carries PRs #3, #4, #5 — Block 1, the toolchain fix, and the false-green hardening. |
+| **Check** | **Green. 238 tests**, ruff clean, `mypy --strict` clean over 42 files. |
+| **Block 1** | Code complete and merged. **Still not finished**: nobody has watched `make run-local` open a real pull request. See below. |
+| **Block 2** | Started. The Ledger domain, three-tier retrieval and promotion are implemented and tested with no cloud. The Librarian, Memory Bank and Firestore adapters, and OTel spans are not. |
+| **Next action** | The live run. It is now blocked on two concrete things, both outside this session (see *Blocked on*). While they land: telemetry, then the Librarian's seams. |
 
-**Cut line: 27 August.** If Block 2's Ledger is not working by then, ship what
-exists plus governance and report a smaller curve as measured. See §8 of the
-spec.
+**Blocked on**
+
+- **A fork to point at.** `NIGHTSHIFT_FORK_ORG` is unset and there is no fork
+  pool. The `GITHUB_TOKEN` in `.env` is scoped to `Varshavia/nightshift` only,
+  so it cannot fork or create repositories. Fork one suitable repository by
+  hand, then add it to the token's selected repositories.
+- **Model access.** Credit requested 19 Aug, not yet granted. Note that a
+  `PATCHED_CLEAN` run calls **no model at all** — clone, build, baseline,
+  upgrade, verify and PR are entirely model-free. A live run on a repository
+  whose upgrade does not break the suite would close most of Block 1 today,
+  without Gemini.
+
+**Cut line: 27 August.** Unchanged.
 
 ### How to pick this up cold
 
@@ -78,6 +88,68 @@ STATUS banner and ticked checkboxes showing exactly what landed).
 ---
 
 ## Log
+
+### 2026-08-19 · Claude (Suat's session) · Hardening, then the Ledger domain
+
+**Reviewed Etka's Block 1 by probing it rather than reading it.** Wrote eight
+adversarial commands against the policy engine and ran them. Five were allowed:
+
+```
+ALLOW  pip install jinja2==2.11.3          downgrade the library
+ALLOW  git checkout -- .                   revert the working tree
+ALLOW  git stash                           stash the upgrade
+ALLOW  pytest --deselect tests/x.py::test  deselect the failing test
+ALLOW  pytest --ignore=tests/x.py          skip the failing file
+```
+
+Three were inert **by accident**: the loop decides from its own fixed-argv test
+run, so nothing the agent passes to pytest reaches the verdict. That accident is
+now pinned by a test in `tests/test_false_green.py` so it cannot quietly stop
+being true.
+
+One was real, and it was my bug, not Etka's — `pip` was on the executable
+allowlist with no constraint on what it may install. Fixed two ways, in order of
+importance:
+
+1. **After a green suite, `upgrade_drift` reads the installed version of every
+   upgraded package out of the sandbox** and compares it to the fixed version.
+   Drift means the green proves nothing. This catches every route, including
+   ones nobody has thought of, which is why it matters more than the allowlist.
+2. A `no-downgrade` policy rule for the packages a job came to upgrade.
+   `pip install -r requirements.txt` stays allowed — the manifest already carries
+   the new pin. Writing this rule, its own test caught `poetry add jinja2@2.11.3`
+   slipping through: poetry uses `@` as the version separator.
+
+**Also fixed the wall-clock ceiling.** It accumulated only per-attempt durations,
+so clone, environment build and both full suite runs — the slowest phases of a
+job — did not count. A repository taking twenty-five minutes to install entered
+the repair loop with a ceiling that had not started. `Budget` now has one clock,
+started once in `handle` and read everywhere.
+
+**Then Block 2's foundation:** `packages/nightshift_core/ledger.py`. Scope key,
+recipe, evidence, the three-tier read path, and promotion. Entirely offline —
+`InMemoryRecall` and `InMemoryRecordStore` are what `make run-local` uses, so the
+whole path is exercised without credentials.
+
+**Two things worth arguing with:**
+
+- **The spec contradicts itself on promotion.** §4 says two independent
+  confirmations, §9 says three, §7's demo promotes on the third. I implemented
+  **two** (§4 is the normative section) behind `CONFIRMATIONS_FOR_VERIFIED`, one
+  line to change. Someone should settle it.
+- **`_enrich` prefers the Firestore record over the recall copy.** Memory Bank's
+  text is only rewritten on promotion, so its copy of confirmations lags by
+  design. If that ever stops being true, delete `_enrich` rather than patching it.
+
+**Earlier the same session,** probing four real public repositories with
+`probe_fleet.py` found that `pip install -e .[test]` **exits zero when the extra
+does not exist** — it warns and installs the base package. `itsdangerous` and
+`loguru` keep test deps in PEP 735 `[dependency-groups]`, so we installed nothing
+and recorded `BASELINE_RED` against healthy repositories. `build_environment` is
+now two phases and reads the declared extras instead of guessing names. Also
+learned that **libraries do not pin exact versions** — `itsdangerous` and
+`tenacity` came back `NOT_AFFECTED` because they use ranges. The fork pool must
+target **applications**, not libraries, or half of it will have nothing to scan.
 
 ### 2026-08-19 · Etka · Block 1 implemented end to end, all 7 tasks pushed
 
