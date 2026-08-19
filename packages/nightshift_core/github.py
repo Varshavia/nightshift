@@ -258,11 +258,23 @@ class GitHubClient:
             log.info("%s tree truncated; judging from what came back", repo)
         return [item["path"] for item in payload.get("tree", []) if "path" in item]
 
+    def whoami(self) -> str:
+        """The account this token belongs to. Needed to name a personal fork."""
+        response = self._get("/user")
+        if response.status_code != 200:
+            raise GitHubError(
+                "could not identify the token's account; forking needs a token with "
+                "at least read access to your profile"
+            )
+        return str(response.json().get("login", ""))
+
     def fork(self, repo: str, *, organization: str = "") -> str:
         """Fork into our organisation. Returns the new ``owner/name``.
 
-        The only method here that changes anything on GitHub, and the only one a
-        human has to have approved a list for.
+        With no organisation the fork lands in the token holder's own account,
+        which GitHub expresses by omitting the field rather than by naming a
+        user. Both are equally "an organisation we control" in the sense
+        RESPONSIBLE_USE.md means — what matters is that it is not the upstream.
         """
         body: dict[str, Any] = {"organization": organization} if organization else {}
         response = self._client.post(f"/repos/{repo}/forks", json=body)
