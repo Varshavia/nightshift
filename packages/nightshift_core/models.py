@@ -228,6 +228,10 @@ class RepoJob:
     repair_attempts: list[RepairAttempt] = field(default_factory=list)
     pr_url: str | None = None
     baseline_green: bool | None = None
+    #: Which Ledger tier answered: "exact", "near" or "miss". The independent
+    #: variable of the cost curve, so it is stored on the job as well as being
+    #: put on the trace — a span that expired must not take the number with it.
+    ledger_hit: str = "miss"
     tokens_used: int = 0
     cost_usd: float = 0.0
     notes: str = ""
@@ -300,6 +304,7 @@ class RepoJob:
             "repair_attempts": [a.to_dict() for a in self.repair_attempts],
             "pr_url": self.pr_url,
             "baseline_green": self.baseline_green,
+            "ledger_hit": self.ledger_hit,
             "tokens_used": self.tokens_used,
             "cost_usd": self.cost_usd,
             "notes": self.notes,
@@ -318,6 +323,7 @@ class RepoJob:
             repair_attempts=[RepairAttempt.from_dict(a) for a in data.get("repair_attempts", [])],
             pr_url=data.get("pr_url"),
             baseline_green=data.get("baseline_green"),
+            ledger_hit=data.get("ledger_hit", "miss"),
             tokens_used=int(data.get("tokens_used", 0)),
             cost_usd=float(data.get("cost_usd", 0.0)),
             notes=data.get("notes", ""),

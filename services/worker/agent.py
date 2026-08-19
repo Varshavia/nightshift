@@ -116,12 +116,16 @@ def render_attempt_prompt(context: RepairContext) -> str:
             f" — tests {'passed' if a.tests_passed else 'still failed'}"
             for a in context.previous
         )
+    # After the traceback, deliberately. The agent should form its own reading of
+    # the failure before it is handed somebody else's conclusion; a recipe placed
+    # first would anchor it on a fix that may not be this repository's problem.
+    prior_art = f"\n\nWhat the fleet already knows:\n\n{context.recipe}" if context.recipe else ""
     return (
         f"Repository: {context.repo}\n"
         f"This is attempt {context.attempt}.\n\n"
         f"Upgrades applied:\n{transitions}\n\n"
         f"The test suite now fails:\n\n```\n{context.failing_output}\n```"
-        f"{history}\n\n"
+        f"{history}{prior_art}\n\n"
         "Make one conceptual fix to the calling code. Do not run the test suite "
         "yourself — it is run for you after you finish, and its result is the "
         "only measure of success."

@@ -62,6 +62,11 @@ class RepairContext:
     failing_output: str
     attempt: int
     previous: tuple[RepairAttempt, ...] = ()
+    #: What the Ledger offered, already rendered with its confidence stated.
+    #: Empty on a miss. It is prior art the agent may use, never an instruction
+    #: it must follow — the suite remains the only measure of success, so a
+    #: wrong recipe costs attempts and cannot manufacture a green.
+    recipe: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +95,7 @@ def run_repair_loop(
     run_suite: Callable[..., TestReport] | None = None,
     capture: Callable[[Sandbox], str] | None = None,
     check_drift: Callable[..., Sequence[UpgradeDrift]] | None = None,
+    recipe: str = "",
 ) -> bool:
     """Repair until the suite is green or a ceiling is reached. True when green.
 
@@ -136,6 +142,7 @@ def run_repair_loop(
             failing_output=failing_output,
             attempt=attempt_number,
             previous=tuple(job.repair_attempts),
+            recipe=recipe,
         )
         proposal = agent.attempt(context, tools)
 
