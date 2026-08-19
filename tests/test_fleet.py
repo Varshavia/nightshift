@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from nightshift_core.fleet import (
+    MAX_REPO_SIZE_KB,
     MIN_PINNED_DEPENDENCIES,
     POOL_SCHEMA,
     Candidate,
@@ -36,6 +37,7 @@ def application(**overrides: object) -> Candidate:
         "license_id": "MIT",
         "has_tests": True,
         "pinned_dependencies": 12,
+        "size_kb": 4_000,
         "manifests": ("requirements.txt",),
     }
     base.update(overrides)
@@ -179,3 +181,35 @@ def test_merging_keeps_the_entry_that_has_already_been_reviewed() -> None:
     )
     assert merged.repos == ["ns/one", "ns/two"]
     assert merged.entries[0].notes == "checked by hand"
+
+
+# --------------------------------------------------------------------------- #
+# Size — the ceiling that the first real run made necessary
+# --------------------------------------------------------------------------- #
+
+
+def test_a_repository_too_large_for_a_job_is_rejected() -> None:
+    """Measured, not guessed. The first real proposal returned seven usable
+    repositories and every one of them — home-assistant/core, apache/superset —
+    was larger than a fifteen-minute install and a fifteen-minute test run.
+    Forking them fills the pool with jobs that can only end UNBUILDABLE."""
+    ok, reason = eligibility(application(size_kb=MAX_REPO_SIZE_KB + 1))
+    assert not ok
+    assert "UNBUILDABLE" in reason
+
+
+def test_a_repository_at_the_ceiling_is_still_accepted() -> None:
+    assert eligibility(application(size_kb=MAX_REPO_SIZE_KB))[0]
+
+
+def test_the_size_is_reported_in_units_a_person_reads() -> None:
+    _, reason = eligibility(application(size_kb=512_000))
+    assert "512 MB" in reason
+
+
+def test_size_is_carried_into_the_pool_entry() -> None:
+    entry = FleetEntry.from_candidate(
+        application(size_kb=8_000), repo="ns/service", upstream="org/service"
+    )
+    assert entry.size_kb == 8_000
+    assert FleetEntry.from_dict(entry.to_dict()).size_kb == 8_000

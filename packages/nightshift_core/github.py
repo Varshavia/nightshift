@@ -53,6 +53,9 @@ class RepoMetadata:
     fork: bool = False
     default_branch: str = "main"
     pushed_at: str = ""
+    #: Repository size in KB, as GitHub reports it. Free in the metadata we
+    #: already fetch, and the cheapest predictor of whether a job can finish.
+    size_kb: int = 0
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> RepoMetadata:
@@ -65,6 +68,7 @@ class RepoMetadata:
             fork=bool(data.get("fork", False)),
             default_branch=data.get("default_branch") or "main",
             pushed_at=data.get("pushed_at") or "",
+            size_kb=int(data.get("size", 0)),
         )
 
 

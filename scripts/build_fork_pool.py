@@ -42,9 +42,21 @@ from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
 
 log = logging.getLogger("nightshift.forkpool")
 
-#: Applications, not libraries. Stars are a proxy for "somebody maintains this",
-#: and the push date for "the test suite has been run this year".
-DEFAULT_QUERY = "language:python stars:>100 pushed:>2025-01-01 archived:false"
+#: Retuned after the first real run, which assessed 60 repositories and produced
+#: seven usable ones — and every one of those seven was too big to run.
+#:
+#: Sorting the whole of GitHub by stars returns the internet's most-starred
+#: Python repositories, and those are awesome-lists, books and tutorials (22 of
+#: 53 rejections were licences like CC-BY: content, not code) or enormous
+#: frameworks. What the fleet needs is the unglamorous middle: real applications
+#: with pinned requirements and a suite that finishes.
+#:
+#: So the star count is bounded at both ends rather than only below, and size is
+#: capped. `pushed` is a proxy for the suite having been run recently enough to
+#: be green.
+DEFAULT_QUERY = (
+    "language:python stars:100..3000 size:<50000 pushed:>2025-06-01 archived:false"
+)
 
 #: Path shapes that mean a machine can find the suite.
 _TEST_MARKERS = ("tests/", "test/", "conftest.py")
@@ -82,6 +94,7 @@ def assess(client: GitHubClient, meta: RepoMetadata) -> Candidate:
         archived=meta.archived,
         fork=meta.fork,
         has_tests=has_tests,
+        size_kb=meta.size_kb,
         pinned_dependencies=pinned,
         manifests=tuple(with_pins),
     )
@@ -122,6 +135,7 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
                         "stars": c.stars,
                         "license_id": c.license_id,
                         "pinned_dependencies": c.pinned_dependencies,
+                        "size_kb": c.size_kb,
                         "manifests": list(c.manifests),
                         "keep": True,
                     }
@@ -140,7 +154,10 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
 
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
-        print(f"  {candidate.repo:<45} {candidate.pinned_dependencies:>3} pins")
+        print(
+            f"  {candidate.repo:<40} {candidate.pinned_dependencies:>4} pins"
+            f"  {candidate.size_kb // 1000:>4} MB"
+        )
     if len(accepted) > 20:
         print(f"  ... and {len(accepted) - 20} more")
     print(f"\nwritten to {out}")
@@ -194,6 +211,7 @@ def run_fork(args: argparse.Namespace, token: str) -> int:
                     stars=int(entry.get("stars", 0)),
                     pinned_dependencies=int(entry.get("pinned_dependencies", 0)),
                     manifests=tuple(entry.get("manifests", ())),
+                    size_kb=int(entry.get("size_kb", 0)),
                 )
             )
 
