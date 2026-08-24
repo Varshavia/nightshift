@@ -124,6 +124,12 @@ class Candidate:
     #: Which distributions they are against, so a reviewer can see at a glance
     #: whether the finding is a real dependency or a linter in a dev extra.
     advisory_packages: tuple[str, ...] = ()
+    #: The transitions themselves, as ``"pyjwt 1.7.1 -> 2.0.0"``. Kept in full
+    #: because the size of the jump is the whole signal, and a reviewer reading
+    #: the proposal should not have to look them up.
+    advisory_jumps: tuple[str, ...] = ()
+    #: How many of those cross a major version. See :meth:`likely_to_break`.
+    major_jump_advisories: int = 0
 
     @property
     def call_path_advisories(self) -> int:
@@ -143,6 +149,24 @@ class Candidate:
             for package in self.advisory_packages
             if str(canonicalize_name(package)) not in BUILD_TOOLING
         )
+
+    @property
+    def likely_to_break(self) -> int:
+        """Advisories whose fix is a major version away, on the call path.
+
+        The sharpest predictor we have, and it took two rounds of measurement to
+        see it. OSV answers with the *lowest* version that carries the fix, so
+        most advisories resolve to a patch release: `urllib3 1.26.4 -> 1.26.5`
+        closes a CVE and breaks nothing, which is why the first two repositories
+        that reached the measurement both came back CLEAN. Dependabot handles
+        those perfectly well, and this project has nothing to add to them.
+
+        Nightshift's subject is the other kind — where the only published fix is
+        two majors ahead, the API moved underneath the caller, and the pull
+        request needs code changes nobody has written yet. Selecting for that is
+        selecting for the work we exist to do.
+        """
+        return self.major_jump_advisories
 
     @property
     def normalised_licence(self) -> str:

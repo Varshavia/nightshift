@@ -37,8 +37,12 @@ if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoke
     _root = Path(__file__).resolve().parent.parent
     sys.path[:0] = [str(_root), str(_root / "packages")]
 
+from packaging.utils import canonicalize_name
+from packaging.version import InvalidVersion, Version
+
 from nightshift_core.config import load_env_file
 from nightshift_core.fleet import (
+    BUILD_TOOLING,
     Candidate,
     FleetEntry,
     FleetPool,
@@ -155,6 +159,9 @@ def assess(
             # tree request as "no tests".
             log.warning("could not check advisories for %s: %s", meta.full_name, exc)
 
+    jumps = tuple(
+        f"{v.package} {v.installed_version} -> {v.fixed_version}" for v in advisories
+    )
     return Candidate(
         repo=meta.full_name,
         stars=meta.stars,
@@ -168,7 +175,31 @@ def assess(
         advisories_checked=checked,
         actionable_advisories=len(advisories),
         advisory_packages=tuple(dict.fromkeys(v.package for v in advisories)),
+        advisory_jumps=jumps,
+        major_jump_advisories=sum(
+            1
+            for v in advisories
+            if str(canonicalize_name(v.package)) not in BUILD_TOOLING
+            and _crosses_a_major(v.installed_version, v.fixed_version)
+        ),
     )
+
+
+def _crosses_a_major(installed: str, fixed: str | None) -> bool:
+    """Whether the only published fix is a major version away.
+
+    Unparseable versions answer False rather than raising. A survey is not the
+    place to discover that one advisory in four hundred carries a date where a
+    version should be, and guessing "probably breaking" about a version nobody
+    can compare would put noise at the top of the list — which is the one place
+    noise costs the most.
+    """
+    if not fixed:
+        return False
+    try:
+        return Version(fixed).major > Version(installed).major
+    except InvalidVersion:
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -223,7 +254,13 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     # highest by stars.
     # Ranked on advisories against something the repository calls, not on the
     # raw count: apiflask advertised three and every one was build tooling.
-    accepted.sort(key=lambda c: (-c.call_path_advisories, -c.actionable_advisories))
+    # Ordered by what we are actually hunting: advisories whose only fix is a
+    # major version away. Two repositories reached the measurement on the raw
+    # count and both came back CLEAN, because OSV answers with the lowest
+    # fixed version and that is usually a patch release.
+    accepted.sort(
+        key=lambda c: (-c.likely_to_break, -c.call_path_advisories, -c.actionable_advisories)
+    )
     accepted = accepted[: args.limit]
 
     out = Path(args.out)
@@ -248,6 +285,8 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
                         "manifests": list(c.manifests),
                         "actionable_advisories": c.actionable_advisories,
                         "call_path_advisories": c.call_path_advisories,
+                        "major_jump_advisories": c.major_jump_advisories,
+                        "advisory_jumps": list(c.advisory_jumps),
                         "advisory_packages": list(c.advisory_packages),
                         "keep": True,
                     }
@@ -273,8 +312,9 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
         print(
-            f"  {candidate.repo:<40} {candidate.call_path_advisories:>3} on the call path"
-            f"  ({candidate.actionable_advisories:>2} total)  {candidate.size_kb // 1000:>4} MB"
+            f"  {candidate.repo:<40} {candidate.likely_to_break:>2} major jumps"
+            f"  {candidate.call_path_advisories:>3} on the call path"
+            f"  ({candidate.actionable_advisories:>2} total)"
         )
     if len(accepted) > 20:
         print(f"  ... and {len(accepted) - 20} more")

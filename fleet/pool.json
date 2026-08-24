@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generated_at": "2026-08-24T14:50:04.764014+00:00",
-  "count": 11,
+  "count": 22,
   "entries": [
     {
       "repo": "Varshavia/throttled",
@@ -160,6 +160,161 @@
       "has_tests": true,
       "size_kb": 9449,
       "added_at": "2026-08-24T16:14:00.812443+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/django-job-portal",
+      "upstream": "manjurulhoque/django-job-portal",
+      "license_id": "MIT",
+      "stars": 623,
+      "pinned_dependencies": 116,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 9609,
+      "added_at": "2026-08-24T16:57:57.869911+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/playlistor",
+      "upstream": "akornor/playlistor",
+      "license_id": "MIT",
+      "stars": 675,
+      "pinned_dependencies": 56,
+      "manifests": [
+        "requirements/dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 3746,
+      "added_at": "2026-08-24T16:57:58.839741+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/django-lifecycle",
+      "upstream": "rsinger86/django-lifecycle",
+      "license_id": "MIT",
+      "stars": 1404,
+      "pinned_dependencies": 26,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 2054,
+      "added_at": "2026-08-24T16:57:59.727592+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/djangoSIGE",
+      "upstream": "thiagopena/djangoSIGE",
+      "license_id": "MIT",
+      "stars": 466,
+      "pinned_dependencies": 36,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 1740,
+      "added_at": "2026-08-24T16:58:00.726547+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/mini-shop-server",
+      "upstream": "Allen7D/mini-shop-server",
+      "license_id": "MIT",
+      "stars": 831,
+      "pinned_dependencies": 20,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 9019,
+      "added_at": "2026-08-24T16:58:01.639790+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flask-security",
+      "upstream": "pallets-eco/flask-security",
+      "license_id": "MIT",
+      "stars": 698,
+      "pinned_dependencies": 25,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 8145,
+      "added_at": "2026-08-24T16:58:02.680152+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flaskr-tdd",
+      "upstream": "mjhea0/flaskr-tdd",
+      "license_id": "MIT",
+      "stars": 2343,
+      "pinned_dependencies": 7,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 521,
+      "added_at": "2026-08-24T16:58:03.525853+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flask-jwt-extended",
+      "upstream": "vimalloc/flask-jwt-extended",
+      "license_id": "MIT",
+      "stars": 1581,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 985,
+      "added_at": "2026-08-24T16:58:04.347140+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/parsifal",
+      "upstream": "vitorfs/parsifal",
+      "license_id": "MIT",
+      "stars": 513,
+      "pinned_dependencies": 13,
+      "manifests": [
+        "requirements/base.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 3393,
+      "added_at": "2026-08-24T16:58:05.318078+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flask-thumbnails",
+      "upstream": "silentsokolov/flask-thumbnails",
+      "license_id": "MIT",
+      "stars": 60,
+      "pinned_dependencies": 7,
+      "manifests": [
+        "requirements-dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 87,
+      "added_at": "2026-08-24T16:58:06.282769+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/LibreCrawl",
+      "upstream": "PhialsBasement/LibreCrawl",
+      "license_id": "MIT",
+      "stars": 875,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 563,
+      "added_at": "2026-08-24T16:58:07.021711+00:00",
       "notes": ""
     }
   ]

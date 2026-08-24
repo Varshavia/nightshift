@@ -332,3 +332,38 @@ def test_the_tooling_list_leaves_out_anything_genuinely_ambiguous() -> None:
     """
     for package in ("click", "requests", "jinja2", "urllib3", "flask", "django"):
         assert package not in BUILD_TOOLING
+
+
+def test_a_patch_release_fix_is_not_expected_to_break_anything() -> None:
+    """Why the first two measurable repositories both came back CLEAN.
+
+    OSV answers with the *lowest* version carrying the fix, and that is usually
+    a patch release. `urllib3 1.26.4 -> 1.26.5` closes a CVE and moves no API.
+    Dependabot handles those, and Nightshift has nothing to add to them.
+    """
+    candidate = application(major_jump_advisories=0, advisory_packages=("urllib3",))
+    assert candidate.likely_to_break == 0
+
+
+def test_a_major_jump_is_what_we_are_hunting() -> None:
+    """`pyjwt 1.7.1 -> 2.0.0` moved `jwt.decode`; every caller had to change."""
+    candidate = application(
+        major_jump_advisories=2,
+        advisory_packages=("pyjwt", "flask"),
+        advisory_jumps=("pyjwt 1.7.1 -> 2.0.0", "flask 1.1.2 -> 2.0.0"),
+    )
+    assert candidate.likely_to_break == 2
+
+
+def test_an_unparseable_version_does_not_claim_a_major_jump() -> None:
+    """Guessing "probably breaking" would put noise at the top of the list.
+
+    The top of the list is where noise costs the most: it decides which
+    repositories get forked, cloned and probed for twenty minutes each.
+    """
+    from scripts.build_fork_pool import _crosses_a_major
+
+    assert not _crosses_a_major("2024-01-01", "r2")
+    assert not _crosses_a_major("1.0.0", None)
+    assert _crosses_a_major("1.7.1", "2.0.0")
+    assert not _crosses_a_major("1.26.4", "1.26.5")

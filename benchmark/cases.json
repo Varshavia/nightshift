@@ -1,20 +1,20 @@
 {
   "schema": 1,
-  "generated_at": "2026-08-24T16:28:56Z",
+  "generated_at": "2026-08-24T17:20:14Z",
   "summary": {
-    "probed": 11,
+    "probed": 22,
     "counts": {
-      "UNBUILDABLE": 0,
-      "PROBE_ERROR": 1,
-      "NO_TESTS": 0,
-      "BASELINE_RED": 7,
+      "UNBUILDABLE": 1,
+      "PROBE_ERROR": 2,
+      "NO_TESTS": 3,
+      "BASELINE_RED": 12,
       "NO_FIX_AVAILABLE": 0,
       "NOT_AFFECTED": 2,
       "UPGRADE_FAILED": 0,
-      "CLEAN": 1,
+      "CLEAN": 2,
       "BREAKING": 0
     },
-    "upgrades_attempted": 1,
+    "upgrades_attempted": 2,
     "breaking": 0,
     "break_rate": 0.0
   },
@@ -25,7 +25,7 @@
       "verdict": "NOT_AFFECTED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 2.5758956700001363,
+      "baseline_seconds": 2.4589152309999918,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": ""
@@ -35,7 +35,7 @@
       "verdict": "NOT_AFFECTED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.0635198330001003,
+      "baseline_seconds": 0.9765033470002891,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": ""
@@ -45,7 +45,7 @@
       "verdict": "PROBE_ERROR",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 2.86726223200003,
+      "baseline_seconds": 2.9414872629995443,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 3; base:-e . -> ok; runner:pytest -> ok; collection still failing after every strategy"
@@ -59,8 +59,8 @@
       "advisories": [
         "PYSEC-2026-2121"
       ],
-      "baseline_seconds": 6.330448268000055,
-      "verify_seconds": 6.3439660720000575,
+      "baseline_seconds": 6.600089305999973,
+      "verify_seconds": 6.42402538999977,
       "failing_output": "",
       "notes": ""
     },
@@ -69,7 +69,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.387037884000165,
+      "baseline_seconds": 1.4208853879999879,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
@@ -79,7 +79,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 71.78796328800036,
+      "baseline_seconds": 69.17290938699989,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 1"
@@ -89,7 +89,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 5.931024650999916,
+      "baseline_seconds": 6.306086923999828,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
@@ -99,7 +99,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.2496206989999337,
+      "baseline_seconds": 1.322330313000748,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
@@ -109,7 +109,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.029202135000105,
+      "baseline_seconds": 1.1127254660004837,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
@@ -119,7 +119,7 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 2.7437981129996842,
+      "baseline_seconds": 2.9629930800001603,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
@@ -129,10 +129,130 @@
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.0131700750002892,
+      "baseline_seconds": 1.062462551999488,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/django-job-portal",
+      "verdict": "UNBUILDABLE",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 0.0,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "the project would not install:\nbootstrap -> ok\nbase:-e . -> failed\nbase:-r requirements.txt -> failed\nlast error:\nERROR: Cannot install -r requirements.txt (line 113) and pillow==12.2.0 because these package versions have conflicting dependencies.\nERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts\n"
+    },
+    {
+      "repo": "Varshavia/playlistor",
+      "verdict": "NO_TESTS",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 0.4471112829996855,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/django-lifecycle",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.3612242999997761,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/djangoSIGE",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 2.0270617489995857,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/mini-shop-server",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.1705881289999525,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/flask-security",
+      "verdict": "PROBE_ERROR",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.2680232200000319,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 4; runner:pytest -> ok; file:requirements/dev.txt -> ok; collection still failing after every strategy"
+    },
+    {
+      "repo": "Varshavia/flaskr-tdd",
+      "verdict": "CLEAN",
+      "upgrades": [
+        "black 23.10.0 -> 26.3.1",
+        "flask 3.0.0 -> 3.1.3",
+        "gunicorn 21.2.0 -> 22.0.0",
+        "pytest 7.4.2 -> 9.0.3"
+      ],
+      "advisories": [
+        "PYSEC-2026-2121",
+        "GHSA-68rp-wp8r-4726",
+        "GHSA-hc5x-x2vx-497g",
+        "GHSA-6w46-j5rx-g56g"
+      ],
+      "baseline_seconds": 0.9540569699993284,
+      "verify_seconds": 1.0285790180005279,
+      "failing_output": "",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flask-jwt-extended",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 0.9727514839996729,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/parsifal",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.65500174600038,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/flask-thumbnails",
+      "verdict": "NO_TESTS",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 0.4302874650002195,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/LibreCrawl",
+      "verdict": "NO_TESTS",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 0.4380908659995839,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": ""
     }
   ]
 }
