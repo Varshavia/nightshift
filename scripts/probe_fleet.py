@@ -48,6 +48,18 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
+# Run as a file — `python scripts/probe_fleet.py` — Python puts *this directory*
+# on the import path and nothing else, so `services` is not importable. Whether
+# `nightshift_core` is depends on whether someone ran `pip install -e .`, which
+# is what makes the failure confusing: on one machine the first three imports
+# succeed and the fourth does not, on another none of them do. Both roots go on
+# the path, so the script behaves the same in a bare checkout as in a prepared
+# environment. Requiring `python -m scripts.probe_fleet` would also work, but
+# every person who runs this would learn that rule by tripping over it.
+if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoked
+    _root = Path(__file__).resolve().parent.parent
+    sys.path[:0] = [str(_root), str(_root / "packages")]
+
 from services.worker.toolchain import (
     EnvironmentBuildError,
     UpgradeError,

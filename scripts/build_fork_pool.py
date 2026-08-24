@@ -29,6 +29,14 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+# See the note in probe_fleet.py. This script happens to work without it when
+# the package is pip-installed, which is precisely why it is here: the three
+# scripts should not each behave differently depending on how the checkout was
+# set up.
+if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoked
+    _root = Path(__file__).resolve().parent.parent
+    sys.path[:0] = [str(_root), str(_root / "packages")]
+
 from nightshift_core.config import load_env_file
 from nightshift_core.fleet import (
     Candidate,

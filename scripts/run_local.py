@@ -11,10 +11,17 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import tempfile
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
+
+# See the note in probe_fleet.py: run as a file, neither the repository root nor
+# packages/ is on the import path.
+if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoked
+    _root = Path(__file__).resolve().parent.parent
+    sys.path[:0] = [str(_root), str(_root / "packages")]
 
 from services.scanner.main import triage
 from services.worker.main import handle
