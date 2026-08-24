@@ -204,9 +204,14 @@ def probe_one(
             verdict=ProbeVerdict.NO_TESTS,
             baseline_seconds=baseline.duration_seconds,
         )
-    if baseline.collection_failed:
-        # Before an upgrade this is our environment, not their code. Kept out of
-        # BASELINE_RED so the denominator is not padded with our own failures.
+    if baseline.tests_collected == 0 and baseline.collection_errors:
+        # Nothing at all could be imported. Before an upgrade that is our
+        # environment, not their code, and it is kept out of BASELINE_RED so the
+        # denominator is not padded with our own failures.
+        #
+        # A suite that yields *some* tests is not here: 107 usable tests behind
+        # three modules wanting `dateutil` is a repository we can work with, and
+        # discarding it was how twelve of twenty-four were lost.
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.SUITE_UNRUNNABLE,
@@ -215,7 +220,19 @@ def probe_one(
             notes="collection failed before anything was changed; "
             + "; ".join(sandbox.install_log[-4:]),
         )
-    if not baseline.passed:
+    # A suite is usable when *something* in it passes. Demanding a perfectly
+    # green baseline sounds rigorous and is not: it discards a repository with a
+    # hundred passing tests over one that fails for a reason particular to this
+    # container, and it is why flask-jwt-extended — 106 passing, one failing on
+    # an unavailable crypto backend — was thrown away.
+    #
+    # What replaces it is stricter where it counts. The failures that exist
+    # before the upgrade are recorded by name and set aside; the break is what
+    # the upgrade *changed*. A test that was red stays red without counting
+    # against anything, and a test that was green and goes red is the finding,
+    # which is a sharper instrument than a single pass-or-fail bit.
+    already_failing = baseline.failures
+    if baseline.tests_collected and len(already_failing) >= baseline.tests_collected:
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.BASELINE_RED,
@@ -224,7 +241,7 @@ def probe_one(
             # written down without the output that would explain it, and three
             # times the next question has been "why" with nothing to answer it.
             failing_output=baseline.output,
-            notes=f"pytest exit {baseline.exit_code}",
+            notes=f"pytest exit {baseline.exit_code}; nothing in the suite passes",
         )
 
     dependencies = read_dependencies(repo_path)
@@ -264,14 +281,30 @@ def probe_one(
         )
 
     verified = run_tests(sandbox)
+    # The break is the difference, not the state. Anything red before the
+    # upgrade stays red without counting; anything that was green and is now red
+    # is what we came to find — including a module that imported cleanly and now
+    # does not, which is how an upgrade that removes a name announces itself,
+    # before a single test has run.
+    newly_failing = verified.failures - already_failing
+    still_green = not newly_failing
     return ProbeResult(
         repo=repo,
-        verdict=ProbeVerdict.CLEAN if verified.passed else ProbeVerdict.BREAKING,
+        verdict=ProbeVerdict.CLEAN if still_green else ProbeVerdict.BREAKING,
         upgrades=upgrades,
         advisories=tuple(v.osv_id for v in fixable),
         baseline_seconds=baseline.duration_seconds,
         verify_seconds=verified.duration_seconds,
-        failing_output="" if verified.passed else verified.output,
+        failing_output="" if still_green else verified.output,
+        notes=(
+            f"{baseline.tests_collected} tests at baseline, "
+            f"{len(already_failing)} already failing"
+            + (
+                ""
+                if still_green
+                else "; newly failing: " + ", ".join(sorted(newly_failing)[:12])
+            )
+        ),
     )
 
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -51,8 +52,10 @@ __all__ = [
     "build_environment",
     "capture_diff",
     "clone",
+    "collection_counts",
     "diff_stats",
     "discover_manifests",
+    "failing_ids",
     "installed_versions",
     "run_tests",
     "upgrade_drift",
@@ -98,6 +101,15 @@ class TestReport:
     #: cannot serve as its own evidence, so it is not one we can help.
     collected: bool = True
     exit_code: int = 0
+    #: How many tests pytest found. Zero with no errors means the repository has
+    #: no suite; zero *with* errors means we could not build its environment.
+    tests_collected: int = 0
+    #: How many modules failed to import. Compared across the upgrade rather
+    #: than judged on its own: the number that matters is whether it grew.
+    collection_errors: int = 0
+    #: Which tests and modules were red. A set, not a count, so that the run
+    #: after the upgrade can be diffed against the run before it.
+    failures: frozenset[str] = frozenset()
 
     @property
     def internal_error(self) -> bool:
@@ -353,18 +365,68 @@ def _django_settings_candidates(repo_path: Path) -> list[str]:
     return [dotted for _, dotted in sorted(found)][:6]
 
 
-def _collects(sandbox: Sandbox) -> bool:
-    """Can pytest import the suite at all?
+#: pytest reports its totals two different ways and we see both. A collection
+#: run says "107 tests collected, 3 errors in 0.47s"; a full run says
+#: "1 failed, 106 passed, 3 errors in 0.76s" and never uses the word collected.
+#: Reading only the first shape reports an empty suite for a suite that ran.
+_COLLECTED_RE = re.compile(r"(\d+)\s+tests?\s+collected")
+_ERRORS_RE = re.compile(r"(\d+)\s+errors?\b")
+_OUTCOME_RE = re.compile(r"(\d+)\s+(passed|failed|skipped|xfailed|xpassed)\b")
 
-    Collection is cheap and it is the honest test of whether the environment is
-    complete. Exit 5 (nothing collected) counts as collecting: the environment
-    is fine, the repository simply has no tests, which is a different finding.
+#: The individual casualties, which is what makes a before-and-after comparison
+#: possible: "FAILED tests/test_auth.py::test_token - AssertionError" and
+#: "ERROR tests/test_config.py".
+_FAILED_LINE_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", re.MULTILINE)
+
+
+def collection_counts(output: str) -> tuple[int, int]:
+    """How many tests pytest accounted for, and how many modules it could not import."""
+    collected = _COLLECTED_RE.search(output)
+    if collected:
+        total = int(collected.group(1))
+    else:
+        total = sum(int(match.group(1)) for match in _OUTCOME_RE.finditer(output))
+    errors = _ERRORS_RE.findall(output)
+    return total, int(errors[-1]) if errors else 0
+
+
+def failing_ids(output: str) -> frozenset[str]:
+    """Which tests and modules pytest reported as failed or errored.
+
+    Identities rather than a count, because the useful question is never "how
+    many are red" but "which ones went red that were not red before". A suite
+    with one pre-existing failure is still perfectly good evidence for whether
+    an upgrade broke something — as long as that failure is named and set aside
+    rather than used to disqualify the whole repository.
+    """
+    return frozenset(_FAILED_LINE_RE.findall(output))
+
+
+def _collects(sandbox: Sandbox) -> bool:
+    """Did pytest find any tests at all?
+
+    Not "did pytest exit zero". That was the earlier rule and it discarded
+    working repositories wholesale: ``flask-jwt-extended`` collects 107 tests
+    and fails on three modules that import ``dateutil``, and a whole repository
+    with a hundred usable tests was thrown away over three of them. Twelve of
+    twenty-four repositories in the last pool were refused this way.
+
+    A suite that yields some tests is a suite we can use as evidence. Which
+    modules failed to import is recorded separately and compared before and
+    after the upgrade — a module that imported cleanly and stops importing is
+    not noise, it is the break.
+
+    Exit 5 — nothing collected, no errors — still counts as a working
+    environment: the repository simply has no tests, which is its own finding.
     """
     result = sandbox.run(
         [sandbox.python, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
         timeout=300,
     )
-    return result.returncode in {0, 5}
+    if result.returncode in {0, 5}:
+        return True
+    collected, _ = collection_counts((result.stdout or "") + (result.stderr or ""))
+    return collected > 0
 
 
 def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sandbox:
@@ -486,7 +548,21 @@ def run_tests(sandbox: Sandbox, *, timeout: int = TEST_TIMEOUT) -> TestReport:
     started = time.monotonic()
     try:
         result = sandbox.run(
-            [sandbox.python, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--color=no"],
+            [
+                sandbox.python,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "--color=no",
+                # Run the tests that *did* import rather than refusing the whole
+                # suite over a module that wants an optional dependency. The
+                # modules that failed are counted and compared across the
+                # upgrade, so nothing is quietly excused: one that imported
+                # before and does not now is the break we came for.
+                "--continue-on-collection-errors",
+            ],
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -499,13 +575,17 @@ def run_tests(sandbox: Sandbox, *, timeout: int = TEST_TIMEOUT) -> TestReport:
         )
 
     duration = time.monotonic() - started
-    output = _tail((result.stdout or "") + (result.stderr or ""))
+    combined = (result.stdout or "") + (result.stderr or "")
+    collected, collection_errors = collection_counts(combined)
     return TestReport(
         passed=result.returncode == 0,
-        output=output,
+        output=_tail(combined),
         duration_seconds=duration,
         collected=result.returncode != 5,
         exit_code=result.returncode,
+        tests_collected=collected,
+        collection_errors=collection_errors,
+        failures=failing_ids(combined),
     )
 
 

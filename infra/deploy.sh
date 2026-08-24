@@ -92,6 +92,20 @@ grant nightshift-worker roles/secretmanager.secretAccessor
 # scheduler problem and is actually an IAM one.
 grant nightshift-scanner roles/run.invoker
 
+# Cloud Build runs as the project's default compute service account, and on
+# projects created since 2024 that account starts with no roles at all. The
+# failure is remote and unhelpful — "the service account running this build does
+# not have permission to write logs" — and it happens after the whole repository
+# has been uploaded, so it costs a full build cycle to discover.
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+BUILD_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+say "granting Cloud Build (${BUILD_SA}) what it needs"
+for role in roles/logging.logWriter roles/artifactregistry.writer roles/storage.objectUser; do
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member "serviceAccount:${BUILD_SA}" --role "$role" \
+    --condition=None --quiet >/dev/null
+done
+
 # --------------------------------------------------------------------------- #
 # Secrets
 # --------------------------------------------------------------------------- #
@@ -115,7 +129,12 @@ fi
 # --------------------------------------------------------------------------- #
 if ! gcloud firestore databases describe --database="(default)" --project "$PROJECT" >/dev/null 2>&1; then
   say "creating Firestore database"
-  gcloud firestore databases create --location="$REGION" --project "$PROJECT" --quiet
+  # `--type` is stated rather than left to the default. A database created in
+  # Datastore mode looks fine until the first write, which fails with an error
+  # about entity groups that says nothing about the real cause, and the mode
+  # cannot be changed afterwards — the database has to be deleted and remade.
+  gcloud firestore databases create \
+    --location="$REGION" --type=firestore-native --project "$PROJECT" --quiet
 fi
 
 if ! gcloud pubsub topics describe "$TOPIC" --project "$PROJECT" >/dev/null 2>&1; then
