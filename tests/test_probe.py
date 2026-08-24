@@ -8,12 +8,19 @@ project's central claim is wrong, so it gets its own tests.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
+from scripts import probe_fleet
 from scripts.probe_fleet import (
     ProbeResult,
     ProbeVerdict,
     benchmark_cases,
     summarise,
 )
+
+from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
 
 
 def _result(verdict: ProbeVerdict, repo: str = "a/b", **kwargs: object) -> ProbeResult:
@@ -113,3 +120,40 @@ def test_an_osv_outage_is_not_recorded_as_an_unbuildable_repository() -> None:
     summary = summarise([_result(ProbeVerdict.PROBE_ERROR)])
     assert summary.counts["UNBUILDABLE"] == 0
     assert summary.counts["PROBE_ERROR"] == 1
+
+
+def test_the_probe_reads_the_reviewed_pool_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two halves of the pipeline have to meet without a person retyping.
+
+    ``build_fork_pool.py fork`` writes ``fleet/pool.json``; the probe used to
+    demand a plain text file, so the list would have been copied out by hand —
+    and a hand-copied list is a list nobody reviewed, which is exactly what ADR
+    0002 says must not happen.
+    """
+    pool = FleetPool(entries=(FleetEntry(repo="me/service", upstream="org/service"),))
+    save_pool(pool, tmp_path / "pool.json")
+
+    seen: list[Sequence[str]] = []
+
+    def record(repos: Sequence[str]) -> list[ProbeResult]:
+        seen.append(repos)
+        return []
+
+    monkeypatch.setattr(probe_fleet, "probe_fleet", record)
+
+    probe_fleet.main(
+        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json")]
+    )
+
+    assert seen == [["me/service"]]
+
+
+def test_a_missing_pool_says_how_to_build_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json")])
+
+    assert code == 2
+    assert "build_fork_pool.py" in capsys.readouterr().err

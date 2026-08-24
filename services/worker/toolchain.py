@@ -24,6 +24,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -307,7 +308,11 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     """
     venv_path = venv_path or repo_path.parent / ".venv"
     created = subprocess.run(
-        ["python3", "-m", "venv", str(venv_path)],
+        # The interpreter running us, not a `python3` we hope is on PATH. In the
+        # container they are the same thing; on a Windows machine `python3` is
+        # either absent or the Store's stub that opens a shop page, and the
+        # failure arrives as "virtualenv creation failed" with an empty stderr.
+        [sys.executable, "-m", "venv", str(venv_path)],
         capture_output=True,
         text=True,
         timeout=INSTALL_TIMEOUT,
