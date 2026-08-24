@@ -16,6 +16,14 @@ TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"
 REPO="nightshift"
 TARGET="${1:-all}"
 
+# Mirrors .env.example. Set in the environment to override; the defaults are the
+# same ones the services fall back to, so a deployment and a local run disagree
+# about nothing.
+FLEET_POOL="${NIGHTSHIFT_FLEET_POOL:-fleet/pool.json}"
+REPAIR_MODEL="${NIGHTSHIFT_REPAIR_MODEL:-gemini-3.5-flash}"
+ESCALATION_MODEL="${NIGHTSHIFT_ESCALATION_MODEL:-gemini-3.5-pro}"
+FORK_ORG="${NIGHTSHIFT_FORK_ORG:?set NIGHTSHIFT_FORK_ORG — the fleet never operates outside it}"
+
 say() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
 
 # --------------------------------------------------------------------------- #
@@ -24,11 +32,14 @@ say() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
 say "enabling APIs"
 gcloud services enable \
   run.googleapis.com \
+  cloudbuild.googleapis.com \
   pubsub.googleapis.com \
   cloudscheduler.googleapis.com \
   firestore.googleapis.com \
   artifactregistry.googleapis.com \
   aiplatform.googleapis.com \
+  secretmanager.googleapis.com \
+  cloudtrace.googleapis.com \
   --project "$PROJECT" --quiet
 
 # --------------------------------------------------------------------------- #
@@ -68,6 +79,37 @@ grant nightshift-worker roles/aiplatform.user
 # through a narrow path, not a broad role.
 grant nightshift-api roles/datastore.viewer
 
+# Everything that runs writes spans, because the cost curve is a query over them
+# and a service that cannot write a span drops out of the number silently.
+grant nightshift-scanner roles/cloudtrace.agent
+grant nightshift-worker  roles/cloudtrace.agent
+
+# Only the worker opens pull requests, so only the worker reads the token.
+grant nightshift-worker roles/secretmanager.secretAccessor
+
+# The scheduler calls the scanner job as this account, so it has to be allowed
+# to invoke it. Without this the nightly run fails with a 403 that looks like a
+# scheduler problem and is actually an IAM one.
+grant nightshift-scanner roles/run.invoker
+
+# --------------------------------------------------------------------------- #
+# Secrets
+# --------------------------------------------------------------------------- #
+if ! gcloud secrets describe nightshift-github-token --project "$PROJECT" >/dev/null 2>&1; then
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    say "GITHUB_TOKEN is not set and the secret does not exist yet"
+    echo "  The worker cannot open a pull request without it. Create it with:" >&2
+    echo "    printf %s \"\$GITHUB_TOKEN\" | gcloud secrets create nightshift-github-token \\" >&2
+    echo "      --data-file=- --project $PROJECT" >&2
+    exit 1
+  fi
+  say "creating secret nightshift-github-token"
+  # Piped rather than passed as an argument: a token on a command line ends up
+  # in shell history and in the process list.
+  printf %s "$GITHUB_TOKEN" | gcloud secrets create nightshift-github-token \
+    --data-file=- --project "$PROJECT" --quiet
+fi
+
 # --------------------------------------------------------------------------- #
 # Firestore, Pub/Sub, Artifact Registry
 # --------------------------------------------------------------------------- #
@@ -91,16 +133,41 @@ fi
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 
 # --------------------------------------------------------------------------- #
+# Preflight
+# --------------------------------------------------------------------------- #
+# The scanner's image carries the fork pool, and `load_pool` raises on a missing
+# file rather than returning an empty fleet — deliberately, because a scan of
+# zero repositories and a quiet night look identical in the morning. Catching it
+# here turns that into a message before the build instead of a stack trace at
+# two in the morning.
+if [[ ! -f "$FLEET_POOL" ]]; then
+  say "no fork pool at ${FLEET_POOL}"
+  echo "  A fleet with no repositories would run every night and find nothing." >&2
+  echo "  Build one first:" >&2
+  echo "    python scripts/build_fork_pool.py propose" >&2
+  echo "    # read fleet/candidates.json, then" >&2
+  echo "    python scripts/build_fork_pool.py fork --from fleet/candidates.json" >&2
+  exit 1
+fi
+
+# --------------------------------------------------------------------------- #
 # Build and deploy
 # --------------------------------------------------------------------------- #
 build_and_push() {
   local service="$1"
   say "building ${service}"
-  gcloud builds submit --project "$PROJECT" \
-    --tag "${IMAGE_BASE}/${service}:latest" \
-    --config /dev/null . -f "services/${service}/Dockerfile" 2>/dev/null \
-    || docker build -f "services/${service}/Dockerfile" -t "${IMAGE_BASE}/${service}:latest" . \
-    && docker push "${IMAGE_BASE}/${service}:latest"
+  # Cloud Build with a config file, not `--tag`. The two are mutually exclusive,
+  # and `--tag` assumes a Dockerfile at the root of the context — ours are under
+  # services/<name>/ but need the root as context to COPY packages/. The previous
+  # version of this function combined both flags with a `||` fallback whose
+  # precedence meant the local push ran even when the remote build succeeded. It
+  # had never been executed.
+  gcloud builds submit . \
+    --project "$PROJECT" \
+    --region "$REGION" \
+    --config infra/cloudbuild.yaml \
+    --substitutions "_SERVICE=${service},_IMAGE=${IMAGE_BASE}/${service}:latest" \
+    --quiet
 }
 
 deploy_job() {
@@ -113,7 +180,7 @@ deploy_job() {
     --service-account "${sa}@${PROJECT}.iam.gserviceaccount.com" \
     --task-timeout "$timeout" \
     --max-retries 1 \
-    --set-env-vars "NIGHTSHIFT_GCP_PROJECT=${PROJECT},NIGHTSHIFT_GCP_REGION=${REGION},NIGHTSHIFT_JOBS_TOPIC=${TOPIC},ALLOW_UPSTREAM_PRS=false" \
+    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     --set-secrets "GITHUB_TOKEN=nightshift-github-token:latest" \
     --quiet
 }

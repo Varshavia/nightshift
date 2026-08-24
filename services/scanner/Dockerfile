@@ -19,6 +19,10 @@ RUN pip install -r services/scanner/requirements.txt
 
 COPY packages/ packages/
 COPY services/scanner/ services/scanner/
+# The reviewed fork pool. Baked into the image rather than fetched at run time,
+# so the set of repositories a deployed scanner may touch is fixed at the moment
+# a human approved it — not something that can change underneath a running fleet.
+COPY fleet/ fleet/
 
 # Runs as a Cloud Run Job: publishes work, then exits.
 USER 1000

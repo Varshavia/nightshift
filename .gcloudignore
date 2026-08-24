@@ -1,0 +1,46 @@
+# What Cloud Build does *not* need uploaded as build context.
+#
+# This file exists mainly to stop gcloud falling back to .gitignore, which it
+# does when no .gcloudignore is present. That default is a trap here: the fork
+# pool is generated rather than committed, so anything that keeps it out of git
+# would also keep it out of the image the scanner needs it in — and the failure
+# would be a COPY error during a build, far from its cause.
+
+.git/
+.github/
+
+# Caches and local environments. Uploading these is slow and changes the context
+# hash on every run, defeating the layer cache the build config asks for.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+node_modules/
+.next/
+
+# Agent scratch space.
+.nightshift/
+workspaces/
+
+# Secrets never leave the machine. `.env` is in .gitignore too; it is repeated
+# here because this file replaces that default rather than adding to it.
+.env
+.env.*
+!.env.example
+*.pem
+*-key.json
+service-account*.json
+
+# Intermediate proposals. `fleet/pool.json` is deliberately *not* excluded — the
+# scanner image copies it, and it is the reviewed list the whole fleet runs on.
+fleet/candidates.json
+
+.DS_Store
+.idea/
+.vscode/

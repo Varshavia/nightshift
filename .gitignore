@@ -22,6 +22,12 @@ service-account*.json
 .nightshift/
 workspaces/
 
+# The fork pool proposal is an intermediate: regenerated on every search run and
+# noisy in a diff. `fleet/pool.json` is NOT ignored — it is the reviewed list the
+# fleet runs on, and it belongs in the history so a night's results can be tied
+# to the exact set of repositories that produced them.
+fleet/candidates.json
+
 # Node / dashboard
 node_modules/
 .next/
