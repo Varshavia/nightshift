@@ -84,6 +84,17 @@ class Candidate:
     pinned_dependencies: int = 0
     manifests: tuple[str, ...] = ()
 
+    #: Whether OSV was actually asked about this repository's pins. Kept apart
+    #: from the count because "nobody looked" and "we looked and there is
+    #: nothing" must not be the same value: only the second is grounds for
+    #: rejecting a repository.
+    advisories_checked: bool = False
+    #: Advisories against the current pins that have a published fix.
+    actionable_advisories: int = 0
+    #: Which distributions they are against, so a reviewer can see at a glance
+    #: whether the finding is a real dependency or a linter in a dev extra.
+    advisory_packages: tuple[str, ...] = ()
+
     @property
     def normalised_licence(self) -> str:
         return self.license_id.strip().lower()
@@ -228,6 +239,27 @@ def eligibility(candidate: Candidate) -> tuple[bool, str]:
         return False, (
             f"{candidate.pinned_dependencies} exact pins; libraries declare ranges and "
             "a range has no version to ask OSV about"
+        )
+    # Last, because it costs a network call the earlier checks do not, and there
+    # is no sense asking OSV about a repository we have already refused.
+    #
+    # This closes the loop the first six probes exposed. Every earlier check asks
+    # "could we work on this repository", and two repositories passed all of them
+    # and came back NOT_AFFECTED — nothing to fix. That is the query arguing with
+    # itself: `pushed:>...` selects maintained projects, maintained projects keep
+    # their dependencies current, and current dependencies have no advisories.
+    # No GitHub search qualifier expresses "green suite but stale pins", so the
+    # question gets asked directly instead.
+    if candidate.advisories_checked and candidate.actionable_advisories == 0:
+        return False, (
+            "no advisory with a published fix against its current pins; there would "
+            "be nothing for the fleet to upgrade"
+        )
+    if candidate.advisories_checked:
+        return True, (
+            f"{candidate.actionable_advisories} fixable advisories against "
+            + ", ".join(candidate.advisory_packages[:4])
+            + f"; {candidate.pinned_dependencies} pins"
         )
     return True, f"{candidate.pinned_dependencies} pins across {len(candidate.manifests)} manifests"
 

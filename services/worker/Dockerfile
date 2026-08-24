@@ -29,6 +29,7 @@ RUN apt-get update \
       libxml2-dev libxslt1-dev \
       libffi-dev libssl-dev \
       libjpeg-dev zlib1g-dev \
+      libldap2-dev libsasl2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first so that a code change does not invalidate the layer.

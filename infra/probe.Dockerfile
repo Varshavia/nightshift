@@ -43,6 +43,7 @@ RUN apt-get update \
       libxml2-dev libxslt1-dev \
       libffi-dev libssl-dev \
       libjpeg-dev zlib1g-dev \
+      libldap2-dev libsasl2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # pyproject declares no `readme`, so the file is not strictly required to

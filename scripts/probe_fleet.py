@@ -72,7 +72,7 @@ from services.worker.toolchain import (
 
 from nightshift_core.config import load_env_file
 from nightshift_core.fleet import load_pool
-from nightshift_core.models import Vulnerability
+from nightshift_core.models import Vulnerability, consolidate_upgrades
 from nightshift_core.osv import OSVClient
 
 log = logging.getLogger("nightshift.probe")
@@ -216,7 +216,10 @@ def probe_one(
             baseline_seconds=baseline.duration_seconds,
         )
 
-    fixable = [v for v in vulnerabilities if v.actionable]
+    # One upgrade per package, not one per advisory. Four advisories against the
+    # same pinned `black` asked pip for three versions of it at once and were
+    # recorded as a repository that resisted being fixed.
+    fixable = consolidate_upgrades(vulnerabilities)
     if not fixable:
         return ProbeResult(
             repo=repo,

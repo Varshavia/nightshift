@@ -12,6 +12,7 @@ from nightshift_core.models import (
     RepoJob,
     Severity,
     Vulnerability,
+    consolidate_upgrades,
     summarise,
 )
 
@@ -118,3 +119,97 @@ def test_every_outcome_is_terminal_and_none_of_them_is_an_exception() -> None:
         job = _job(pr_url="https://github.com/x/y/pull/1")
         job.finish(outcome)
         assert job.finished and job.phase is Phase.DONE
+
+
+def test_several_advisories_against_one_package_become_one_upgrade() -> None:
+    """The bug that made a real repository look like it resisted being fixed.
+
+    leptonai pinned black 23.12.0, which four OSV advisories affect. Each was
+    treated as its own upgrade, so pip was asked for black at 24.3.0, 26.3.0 and
+    26.3.1 simultaneously and answered ResolutionImpossible. The repository was
+    recorded UPGRADE_FAILED — a verdict about the repository, for a mistake that
+    was entirely ours.
+    """
+    advisories = [
+        Vulnerability(
+            osv_id=osv_id, package="black", installed_version="23.12.0", fixed_version=fixed
+        )
+        for osv_id, fixed in [
+            ("GHSA-fj7x-q9j7-g6q6", "24.3.0"),
+            ("PYSEC-2024-48", "24.3.0"),
+            ("PYSEC-2026-2120", "26.3.0"),
+            ("PYSEC-2026-2121", "26.3.1"),
+        ]
+    ]
+
+    consolidated = consolidate_upgrades(advisories)
+
+    assert len(consolidated) == 1
+    assert consolidated[0].fixed_version == "26.3.1"
+
+
+def test_no_advisory_is_dropped_from_the_record() -> None:
+    """Merging upgrades must not merge away what the PR has to cite."""
+    advisories = [
+        Vulnerability(osv_id="A", package="urllib3", installed_version="1.0", fixed_version="1.1"),
+        Vulnerability(osv_id="B", package="urllib3", installed_version="1.0", fixed_version="2.0"),
+    ]
+
+    winner = consolidate_upgrades(advisories)[0]
+
+    assert winner.osv_id == "B"
+    assert "A" in winner.aliases
+
+
+def test_packages_are_matched_by_canonical_name() -> None:
+    """`Flask-SQLAlchemy` and `flask_sqlalchemy` are the same distribution.
+
+    Missing that would put both spellings in the plan and reproduce the very
+    conflict this function exists to prevent.
+    """
+    advisories = [
+        Vulnerability(
+            osv_id="A", package="Flask-SQLAlchemy", installed_version="2.0", fixed_version="2.5"
+        ),
+        Vulnerability(
+            osv_id="B", package="flask_sqlalchemy", installed_version="2.0", fixed_version="3.0"
+        ),
+    ]
+
+    assert len(consolidate_upgrades(advisories)) == 1
+
+
+def test_different_packages_stay_separate() -> None:
+    advisories = [
+        Vulnerability(osv_id="A", package="urllib3", installed_version="1.0", fixed_version="1.1"),
+        Vulnerability(osv_id="B", package="jinja2", installed_version="2.0", fixed_version="3.0"),
+    ]
+
+    assert [v.package for v in consolidate_upgrades(advisories)] == ["jinja2", "urllib3"]
+
+
+def test_an_unfixable_advisory_is_not_an_upgrade() -> None:
+    advisories = [
+        Vulnerability(osv_id="A", package="urllib3", installed_version="1.0"),
+        Vulnerability(osv_id="B", package="urllib3", installed_version="1.0", fixed_version="1.1"),
+    ]
+
+    consolidated = consolidate_upgrades(advisories)
+
+    assert len(consolidated) == 1
+    assert consolidated[0].osv_id == "B"
+
+
+def test_an_unparseable_fixed_version_does_not_raise() -> None:
+    """Advisories carry dates and vendor strings as versions often enough.
+
+    An exception here would kill a fleet run in the middle, which is a far worse
+    outcome than an arbitrary-but-total ordering between two versions nobody can
+    compare anyway.
+    """
+    advisories = [
+        Vulnerability(osv_id="A", package="thing", installed_version="1", fixed_version="2024-01"),
+        Vulnerability(osv_id="B", package="thing", installed_version="1", fixed_version="r2"),
+    ]
+
+    assert len(consolidate_upgrades(advisories)) == 1

@@ -54,6 +54,8 @@ from nightshift_core.github import (
     WrongTokenType,
 )
 from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
+from nightshift_core.models import Dependency, Vulnerability, consolidate_upgrades
+from nightshift_core.osv import OSVClient
 
 log = logging.getLogger("nightshift.forkpool")
 
@@ -102,12 +104,19 @@ APPLICATION_QUERY = (
 _TEST_MARKERS = ("tests/", "test/", "conftest.py")
 
 
-def assess(client: GitHubClient, meta: RepoMetadata) -> Candidate:
+def assess(
+    client: GitHubClient, meta: RepoMetadata, *, osv: OSVClient | None = None
+) -> Candidate:
     """Read enough of a repository to decide, without cloning it.
 
     Two or three small requests: the tree once, then each manifest the tree says
     exists. Cloning several hundred repositories to count ``==`` signs would be
     the same answer for a great deal more bandwidth.
+
+    When ``osv`` is supplied the pins are also checked against the advisory
+    database — one batched request per repository, no clone, no model. This is
+    the difference between a pool of repositories we *could* work on and a pool
+    of repositories there is work to do on.
     """
     paths = client.list_paths(meta.full_name, ref=meta.default_branch or "HEAD")
     has_tests = any(
@@ -116,16 +125,29 @@ def assess(client: GitHubClient, meta: RepoMetadata) -> Candidate:
     )
 
     present = [name for name in RECOGNISED_MANIFESTS if name in paths]
-    pinned = 0
+    dependencies: list[Dependency] = []
     with_pins: list[str] = []
     for name in present:
         text = client.get_file(meta.full_name, name, ref=meta.default_branch)
         if not text:
             continue
-        count = len(parse_manifest(text, name))
-        if count:
-            pinned += count
+        parsed = parse_manifest(text, name)
+        if parsed:
+            dependencies.extend(parsed)
             with_pins.append(name)
+
+    checked = False
+    advisories: list[Vulnerability] = []
+    if osv is not None and dependencies:
+        try:
+            advisories = consolidate_upgrades(osv.find_vulnerabilities(dependencies))
+            checked = True
+        except Exception as exc:
+            # Deliberately not fatal and deliberately not counted as zero. An
+            # outage on our side must never become "this repository has nothing
+            # wrong with it" — that is the same mistake as reading a refused
+            # tree request as "no tests".
+            log.warning("could not check advisories for %s: %s", meta.full_name, exc)
 
     return Candidate(
         repo=meta.full_name,
@@ -135,8 +157,11 @@ def assess(client: GitHubClient, meta: RepoMetadata) -> Candidate:
         fork=meta.fork,
         has_tests=has_tests,
         size_kb=meta.size_kb,
-        pinned_dependencies=pinned,
+        pinned_dependencies=len(dependencies),
         manifests=tuple(with_pins),
+        advisories_checked=checked,
+        actionable_advisories=len(advisories),
+        advisory_packages=tuple(dict.fromkeys(v.package for v in advisories)),
     )
 
 
@@ -146,6 +171,7 @@ def assess(client: GitHubClient, meta: RepoMetadata) -> Candidate:
 
 
 def run_propose(args: argparse.Namespace, token: str) -> int:
+    osv = None if args.no_advisories else OSVClient()
     with GitHubClient(token) as client:
         log.info("searching: %s", args.query)
         found = client.search_repositories(args.query, limit=args.search)
@@ -154,7 +180,7 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
         truncated = False
         for index, meta in enumerate(found, start=1):
             try:
-                candidates.append(assess(client, meta))
+                candidates.append(assess(client, meta, osv=osv))
             except RateLimited as exc:
                 # Stop the whole run rather than skipping this one. The quota is
                 # gone for everything that follows, and continuing would spend a
@@ -168,7 +194,14 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
             if index % 10 == 0:
                 log.info("  %d/%d", index, len(found))
 
+    if osv is not None:
+        osv.close()
+
     accepted, rejected = propose(candidates)
+    # Most advisories first, so that `--limit` keeps the repositories with the
+    # most for the fleet to do rather than whichever GitHub happened to sort
+    # highest by stars.
+    accepted.sort(key=lambda c: (-c.actionable_advisories, -c.pinned_dependencies))
     accepted = accepted[: args.limit]
 
     out = Path(args.out)
@@ -191,6 +224,8 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
                         "pinned_dependencies": c.pinned_dependencies,
                         "size_kb": c.size_kb,
                         "manifests": list(c.manifests),
+                        "actionable_advisories": c.actionable_advisories,
+                        "advisory_packages": list(c.advisory_packages),
                         "keep": True,
                     }
                     for c in accepted
@@ -215,8 +250,8 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
         print(
-            f"  {candidate.repo:<40} {candidate.pinned_dependencies:>4} pins"
-            f"  {candidate.size_kb // 1000:>4} MB"
+            f"  {candidate.repo:<40} {candidate.actionable_advisories:>3} advisories"
+            f"  {candidate.pinned_dependencies:>4} pins  {candidate.size_kb // 1000:>4} MB"
         )
     if len(accepted) > 20:
         print(f"  ... and {len(accepted) - 20} more")
@@ -316,6 +351,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     proposer.add_argument("--search", type=int, default=200, help="how many to assess")
     proposer.add_argument("--limit", type=int, default=50, help="how many to propose")
     proposer.add_argument("--out", default="fleet/candidates.json")
+    proposer.add_argument(
+        "--no-advisories",
+        action="store_true",
+        help="skip the OSV check; faster, but proposes repositories with nothing to fix",
+    )
 
     forker = sub.add_parser("fork", help="fork what a human marked keep=true")
     forker.add_argument("--from", dest="source", default="fleet/candidates.json")

@@ -228,3 +228,54 @@ def test_a_repository_rejected_twice_is_reported_once() -> None:
         [application(repo="org/lib", pinned_dependencies=0)] * 3
     )
     assert len(rejected) == 1
+
+
+def test_a_repository_with_nothing_to_fix_is_not_proposed() -> None:
+    """The loop the first six probes closed.
+
+    Every other check asks whether we *could* work on a repository. Two passed
+    all of them, were forked, cloned, built and tested — and came back
+    NOT_AFFECTED, because there was nothing wrong with them. That is the query
+    arguing with itself: `pushed:>...` selects maintained projects, maintained
+    projects keep their dependencies current, and current dependencies have no
+    advisories. No GitHub qualifier expresses "green suite, stale pins", so the
+    question is asked of OSV directly instead.
+    """
+    ok, reason = eligibility(application(advisories_checked=True, actionable_advisories=0))
+    assert not ok
+    assert "nothing for the fleet to upgrade" in reason
+
+
+def test_not_having_looked_is_not_the_same_as_having_found_nothing() -> None:
+    """`--no-advisories`, or an OSV outage, must not reject the whole world.
+
+    Collapsing "nobody asked" into "the answer was zero" is the same error as
+    reading a rate-limited tree request as "this repository has no tests": a
+    failure on our side rewritten as a fact about somebody else's code.
+    """
+    ok, _ = eligibility(application(advisories_checked=False, actionable_advisories=0))
+    assert ok
+
+
+def test_an_affected_repository_says_what_is_wrong_with_it() -> None:
+    ok, reason = eligibility(
+        application(
+            advisories_checked=True,
+            actionable_advisories=3,
+            advisory_packages=("jinja2", "urllib3"),
+        )
+    )
+    assert ok
+    assert "jinja2" in reason
+
+
+def test_the_advisory_check_comes_after_the_cheap_refusals() -> None:
+    """A repository refused for its licence should not cost a network call.
+
+    Asserted through the reason rather than by counting calls: whichever check
+    speaks first is the one that ran first.
+    """
+    _, reason = eligibility(
+        application(license_id="CC-BY-4.0", advisories_checked=True, actionable_advisories=0)
+    )
+    assert "licence" in reason

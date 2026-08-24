@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Self
+
+from packaging.utils import canonicalize_name
+from packaging.version import InvalidVersion, Version
 
 __all__ = [
     "SUCCESS_OUTCOMES",
@@ -27,6 +30,7 @@ __all__ = [
     "RepoJob",
     "Severity",
     "Vulnerability",
+    "consolidate_upgrades",
 ]
 
 _REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
@@ -150,6 +154,74 @@ class Vulnerability:
         )
 
 
+def consolidate_upgrades(vulnerabilities: Iterable[Vulnerability]) -> list[Vulnerability]:
+    """One upgrade per package: the highest fixed version, advisories merged.
+
+    OSV answers per advisory, and a package that has been patched several times
+    produces several advisories against the same pinned version. Treating each
+    one as its own upgrade asks pip to install a package at three versions at
+    once, which it correctly refuses::
+
+        black 23.12.0 -> 24.3.0
+        black 23.12.0 -> 26.3.0
+        black 23.12.0 -> 26.3.1
+        ERROR: ResolutionImpossible
+
+    That is not a hypothetical. It is what a real repository in the pool did,
+    and it was recorded as UPGRADE_FAILED — a verdict that reads as "this
+    repository resisted being fixed" when what actually happened is that we
+    asked for something impossible.
+
+    The highest version is taken because security fixes accumulate: the release
+    that fixes the newest advisory contains the earlier fixes too. Where that
+    assumption fails, it fails safe — the suite is run afterwards either way,
+    and an upgrade that does not resolve an advisory shows up as a repository
+    still reported vulnerable rather than as a silent pass.
+
+    Every merged advisory's identifier is kept in ``aliases``, so nothing is
+    lost from the record: the PR still cites all four.
+    """
+    best: dict[str, Vulnerability] = {}
+    merged: dict[str, list[str]] = {}
+
+    for vulnerability in vulnerabilities:
+        if not vulnerability.actionable:
+            continue
+        key = str(canonicalize_name(vulnerability.package))
+        merged.setdefault(key, []).append(vulnerability.osv_id)
+        incumbent = best.get(key)
+        if incumbent is None or _is_higher(vulnerability.fixed_version, incumbent.fixed_version):
+            best[key] = vulnerability
+
+    consolidated: list[Vulnerability] = []
+    for key, winner in sorted(best.items()):
+        others = tuple(sorted(set(merged[key]) - {winner.osv_id}))
+        consolidated.append(
+            replace(winner, aliases=tuple(dict.fromkeys(winner.aliases + others)))
+            if others
+            else winner
+        )
+    return consolidated
+
+
+def _is_higher(candidate: str | None, incumbent: str | None) -> bool:
+    """Version comparison that never raises on a version it cannot parse.
+
+    Some advisories carry fixed versions that are not PEP 440 — dates, git
+    describes, vendor strings. Falling back to a string comparison is arbitrary
+    but total, and an arbitrary choice between two unparseable versions is a
+    much smaller problem than an exception thrown in the middle of a fleet run.
+    """
+    if candidate is None:
+        return False
+    if incumbent is None:
+        return True
+    try:
+        return Version(candidate) > Version(incumbent)
+    except InvalidVersion:
+        return candidate > incumbent
+
+
 @dataclass(frozen=True, slots=True)
 class Dependency:
     """A pinned requirement read out of a manifest.
@@ -262,7 +334,12 @@ class RepoJob:
 
     @property
     def actionable_vulnerabilities(self) -> list[Vulnerability]:
-        return [v for v in self.vulnerabilities if v.actionable]
+        """One upgrade per package, not one per advisory.
+
+        See :func:`consolidate_upgrades`; the difference is what stopped a real
+        repository from being upgraded at all.
+        """
+        return consolidate_upgrades(self.vulnerabilities)
 
     # -- transitions -------------------------------------------------------- #
 
