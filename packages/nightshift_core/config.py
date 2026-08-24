@@ -10,8 +10,56 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 
-__all__ = ["Ceilings", "Settings", "get_settings"]
+__all__ = ["Ceilings", "Settings", "get_settings", "load_env_file"]
+
+
+#: Read once per process. Reading it again would not pick up edits anyway,
+#: because the values have already been copied into ``os.environ``.
+_ENV_FILE_LOADED = False
+
+
+def load_env_file(path: str | Path = ".env") -> int:
+    """Copy ``KEY=value`` lines from a dotenv file into the environment.
+
+    The repository has shipped a ``.env.example`` since the first commit and
+    nothing read the ``.env`` you were meant to copy it to, so every shell
+    needed the variables exported by hand and a forgotten export looked like a
+    missing token.
+
+    **A real environment variable always wins.** Cloud Run sets its own, and a
+    stale ``.env`` left in an image must not be able to override them — so this
+    fills gaps rather than assigning. That also means exporting a variable for
+    one command still does what you expect.
+
+    No dependency: the format is four rules (comments, blank lines, ``export``
+    prefixes, optional quotes) and importing a library to apply them would be a
+    larger commitment than the parsing.
+    """
+    global _ENV_FILE_LOADED
+    target = Path(path)
+    if _ENV_FILE_LOADED or not target.is_file():
+        return 0
+
+    loaded = 0
+    for raw in target.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = line.removeprefix("export ").strip()
+        key, separator, value = line.partition("=")
+        if not separator:
+            continue
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+            loaded += 1
+
+    _ENV_FILE_LOADED = True
+    get_settings.cache_clear()
+    return loaded
 
 
 def _env(name: str, default: str = "") -> str:
@@ -129,4 +177,5 @@ class Settings:
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Process-wide settings. Cached so the environment is read once."""
+    load_env_file()
     return Settings.from_env()

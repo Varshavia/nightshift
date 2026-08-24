@@ -29,6 +29,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from nightshift_core.config import load_env_file
 from nightshift_core.fleet import (
     Candidate,
     FleetEntry,
@@ -281,15 +282,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         datefmt="%H:%M:%S",
     )
 
+    # Reads .env if there is one, so the token does not have to be exported into
+    # every new shell. A variable already in the environment still wins.
+    load_env_file()
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if not token:
+        if args.command == "fork":
+            print(
+                "GITHUB_TOKEN is not set, and forking needs it.\n"
+                "  Put it in a .env file at the repository root:\n"
+                "    GITHUB_TOKEN=github_pat_...\n"
+                "  .env is gitignored and is read automatically from now on.",
+                file=sys.stderr,
+            )
+            return 2
         print(
-            "GITHUB_TOKEN is not set. Search works without one but is rate-limited to a "
-            "handful of requests, and forking needs it.",
+            "GITHUB_TOKEN is not set. Search works without one but is rate-limited to "
+            "60 requests an hour, which runs out after about thirty repositories.",
             file=sys.stderr,
         )
-        if args.command == "fork":
-            return 2
 
     return run_propose(args, token) if args.command == "propose" else run_fork(args, token)
 

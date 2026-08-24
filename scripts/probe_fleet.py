@@ -51,6 +51,7 @@ from services.worker.toolchain import (
     run_tests,
 )
 
+from nightshift_core.config import load_env_file
 from nightshift_core.models import Vulnerability
 from nightshift_core.osv import OSVClient
 
@@ -273,6 +274,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
+    load_env_file()
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(message)s",
