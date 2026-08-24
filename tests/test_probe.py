@@ -8,12 +8,20 @@ project's central claim is wrong, so it gets its own tests.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
+from scripts import probe_fleet
 from scripts.probe_fleet import (
     ProbeResult,
     ProbeVerdict,
     benchmark_cases,
     summarise,
 )
+
+from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
 
 
 def _result(verdict: ProbeVerdict, repo: str = "a/b", **kwargs: object) -> ProbeResult:
@@ -113,3 +121,88 @@ def test_an_osv_outage_is_not_recorded_as_an_unbuildable_repository() -> None:
     summary = summarise([_result(ProbeVerdict.PROBE_ERROR)])
     assert summary.counts["UNBUILDABLE"] == 0
     assert summary.counts["PROBE_ERROR"] == 1
+
+
+def test_the_probe_reads_the_reviewed_pool_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two halves of the pipeline have to meet without a person retyping.
+
+    ``build_fork_pool.py fork`` writes ``fleet/pool.json``; the probe used to
+    demand a plain text file, so the list would have been copied out by hand —
+    and a hand-copied list is a list nobody reviewed, which is exactly what ADR
+    0002 says must not happen.
+    """
+    pool = FleetPool(entries=(FleetEntry(repo="me/service", upstream="org/service"),))
+    save_pool(pool, tmp_path / "pool.json")
+
+    seen: list[Sequence[str]] = []
+
+    def record(repos: Sequence[str]) -> list[ProbeResult]:
+        seen.append(repos)
+        return []
+
+    monkeypatch.setattr(probe_fleet, "probe_fleet", record)
+
+    probe_fleet.main(
+        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json")]
+    )
+
+    assert seen == [["me/service"]]
+
+
+def test_a_missing_pool_says_how_to_build_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json")])
+
+    assert code == 2
+    assert "build_fork_pool.py" in capsys.readouterr().err
+
+
+def test_every_verdict_is_written_down_not_only_the_breaking_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first real run wrote 439 bytes and explained nothing.
+
+    Six repositories failed before an upgrade was ever applied, each with a
+    `notes` saying why, and the output file kept none of it because only
+    BREAKING results were serialised. A run that finds no cases is the run most
+    in need of diagnosis, so it is the run that must record the most.
+    """
+    monkeypatch.setattr(
+        probe_fleet,
+        "probe_fleet",
+        lambda repos: [
+            ProbeResult(repo="a/b", verdict=ProbeVerdict.UNBUILDABLE, notes="no such extra"),
+        ],
+    )
+    out = tmp_path / "cases.json"
+
+    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out)])
+
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["cases"] == []
+    assert written["results"][0]["notes"] == "no such extra"
+
+
+def test_an_unmeasured_break_rate_does_not_read_as_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        probe_fleet,
+        "probe_fleet",
+        lambda repos: [ProbeResult(repo="a/b", verdict=ProbeVerdict.BASELINE_RED)],
+    )
+
+    probe_fleet.main(
+        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json")]
+    )
+
+    assert "unmeasured rather than zero" in capsys.readouterr().out
+
+
+def _repo_file(tmp_path: Path) -> Path:
+    target = tmp_path / "repos.txt"
+    target.write_text("a/b\n", encoding="utf-8")
+    return target

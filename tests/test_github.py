@@ -15,7 +15,13 @@ import httpx
 import pytest
 from scripts.build_fork_pool import assess
 
-from nightshift_core.github import GitHubClient, GitHubError, RateLimited, RepoMetadata
+from nightshift_core.github import (
+    GitHubClient,
+    GitHubError,
+    RateLimited,
+    RepoMetadata,
+    WrongTokenType,
+)
 
 REPO_JSON = {
     "full_name": "org/service",
@@ -389,6 +395,56 @@ def test_forking_into_an_organisation_names_it() -> None:
 
     _client(handler).fork("org/service", organization="ns-fleet")
     assert b"ns-fleet" in bodies[0]
+
+
+def test_a_fine_grained_token_is_named_as_the_problem() -> None:
+    """The real 403, and the sentence it should turn into.
+
+    Measured against GitHub: a fine-grained personal access token authenticates
+    perfectly — ``/user`` answers 200 with the right login — and then refuses
+    every fork with "Resource not accessible by personal access token". That
+    reads like a missing permission, so the natural response is to go and add
+    scopes, and no scope fixes it: a fork's source belongs to somebody else, and
+    a fine-grained token can only be scoped to repositories you already have.
+    The remedy is a different *kind* of token, so the error has to say so.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={
+                "message": "Resource not accessible by personal access token",
+                "documentation_url": "https://docs.github.com/rest/repos/forks",
+                "status": "403",
+            },
+        )
+
+    with pytest.raises(WrongTokenType) as caught:
+        _client(handler).fork("erpalma/throttled")
+
+    message = str(caught.value)
+    assert "classic" in message
+    assert "public_repo" in message
+    # And not the broader scope, except to warn against it: `repo` grants read
+    # and write over every private repository the account can see, which is a
+    # great deal more than forking a public one needs.
+    assert "private" in message
+
+
+def test_an_ordinary_403_is_still_an_ordinary_error() -> None:
+    """A private repository refuses too, and that one is per-repository.
+
+    Kept distinct so a genuine permission problem on one repository does not
+    stop a run of six, and does not get answered with advice about token types.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"message": "Must have admin rights to Repository."})
+
+    with pytest.raises(GitHubError) as caught:
+        _client(handler).fork("org/private")
+
+    assert not isinstance(caught.value, WrongTokenType)
 
 
 def test_whoami_names_the_account_the_token_belongs_to() -> None:

@@ -19,7 +19,13 @@ out is three things we need before spending a cent of the cloud credit:
 
 Usage::
 
-    python scripts/probe_fleet.py --repos fleet.txt --out benchmark/cases.json
+    python scripts/probe_fleet.py --out benchmark/cases.json
+
+It reads ``fleet/pool.json`` — the reviewed pool that ``build_fork_pool.py fork``
+writes — so the probe surveys exactly the repositories a person signed off on
+and nothing has to be retyped between the two steps. ``--repos`` still takes a
+plain file of ``owner/name`` lines, which is how one repository gets probed on
+its own while something is being debugged.
 
 ``ProbeVerdict`` is deliberately *not*
 :class:`~nightshift_core.models.Outcome`. The probe never attempts a repair, so
@@ -34,12 +40,25 @@ import argparse
 import json
 import logging
 import shutil
+import sys
 import tempfile
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+# Run as a file — `python scripts/probe_fleet.py` — Python puts *this directory*
+# on the import path and nothing else, so `services` is not importable. Whether
+# `nightshift_core` is depends on whether someone ran `pip install -e .`, which
+# is what makes the failure confusing: on one machine the first three imports
+# succeed and the fourth does not, on another none of them do. Both roots go on
+# the path, so the script behaves the same in a bare checkout as in a prepared
+# environment. Requiring `python -m scripts.probe_fleet` would also work, but
+# every person who runs this would learn that rule by tripping over it.
+if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoked
+    _root = Path(__file__).resolve().parent.parent
+    sys.path[:0] = [str(_root), str(_root / "packages")]
 
 from services.worker.toolchain import (
     EnvironmentBuildError,
@@ -52,7 +71,8 @@ from services.worker.toolchain import (
 )
 
 from nightshift_core.config import load_env_file
-from nightshift_core.models import Vulnerability
+from nightshift_core.fleet import load_pool
+from nightshift_core.models import Vulnerability, consolidate_upgrades
 from nightshift_core.osv import OSVClient
 
 log = logging.getLogger("nightshift.probe")
@@ -160,7 +180,10 @@ def probe_one(
         repo_path = clone(repo, workspace, token=token)
         sandbox = build_environment(repo_path)
     except EnvironmentBuildError as exc:
-        return ProbeResult(repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=str(exc)[:500])
+        # Generous, because this is the field that has to answer "why". 500
+        # characters truncated exactly the part that mattered: the install log
+        # came first and the actual error came last.
+        return ProbeResult(repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=str(exc)[:2500])
 
     baseline = run_tests(sandbox)
     if baseline.internal_error:
@@ -193,7 +216,10 @@ def probe_one(
             baseline_seconds=baseline.duration_seconds,
         )
 
-    fixable = [v for v in vulnerabilities if v.actionable]
+    # One upgrade per package, not one per advisory. Four advisories against the
+    # same pinned `black` asked pip for three versions of it at once and were
+    # recorded as a repository that resisted being fixed.
+    fixable = consolidate_upgrades(vulnerabilities)
     if not fixable:
         return ProbeResult(
             repo=repo,
@@ -268,7 +294,13 @@ def probe_fleet(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repos", required=True, help="file with one owner/name per line")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
+        "--pool",
+        default="fleet/pool.json",
+        help="the reviewed fork pool; the default, and what the fleet actually runs on",
+    )
+    source.add_argument("--repos", help="a plain file with one owner/name per line")
     parser.add_argument("--out", default="benchmark/cases.json")
     parser.add_argument("--limit", type=int, default=0, help="0 means no limit")
     parser.add_argument("--verbose", action="store_true")
@@ -281,11 +313,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         datefmt="%H:%M:%S",
     )
 
-    repos = [
-        line.strip()
-        for line in Path(args.repos).read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.startswith("#")
-    ]
+    # The pool is the default source because it is the one list a person has
+    # read and signed off. A plain file still works — it is how a single
+    # repository gets probed while debugging — but nothing should have to be
+    # retyped to get from `fork` to here, and a retyped list is a list nobody
+    # reviewed.
+    if args.repos:
+        repos = [
+            line.strip()
+            for line in Path(args.repos).read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+    else:
+        pool_path = Path(args.pool)
+        if not pool_path.is_file():
+            print(
+                f"no fork pool at {pool_path}. Build one first:\n"
+                "  python scripts/build_fork_pool.py propose --out fleet/candidates.json\n"
+                "  ... read it, then ...\n"
+                "  python scripts/build_fork_pool.py fork --from fleet/candidates.json",
+                file=sys.stderr,
+            )
+            return 2
+        repos = load_pool(pool_path).repos
+
+    if not repos:
+        print("the pool is empty; nothing to probe", file=sys.stderr)
+        return 1
     if args.limit:
         repos = repos[: args.limit]
 
@@ -307,6 +361,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "break_rate": summary.break_rate,
                 },
                 "cases": benchmark_cases(results),
+                # Every repository, not only the breaking ones. The first real
+                # run produced zero cases and a 439-byte file: six verdicts, and
+                # not one word about why any of them happened, even though every
+                # result carried a `notes` explaining itself. A run that finds
+                # nothing is exactly the run whose reasons matter most — it is
+                # the one that has to be diagnosed rather than reported.
+                "results": [result.to_dict() for result in results],
             },
             indent=2,
         ),
@@ -322,7 +383,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"\n{summary.breaking} of {summary.upgrades_attempted} applied security upgrades "
             f"broke the calling code ({summary.break_rate:.0%})"
         )
-    print(f"benchmark cases written to {out}")
+    else:
+        # Not the same as "upgrades never break anything", and the difference is
+        # the whole point of the statistic.
+        print(
+            "\nno upgrade was applied to a green baseline, so the break rate is "
+            "unmeasured rather than zero. The reasons are in the file."
+        )
+    print(f"written to {out}")
     return 0
 
 

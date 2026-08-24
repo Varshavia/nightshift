@@ -26,7 +26,14 @@ from typing import Any
 
 import httpx
 
-__all__ = ["GITHUB_API", "GitHubClient", "GitHubError", "RateLimited", "RepoMetadata"]
+__all__ = [
+    "GITHUB_API",
+    "GitHubClient",
+    "GitHubError",
+    "RateLimited",
+    "RepoMetadata",
+    "WrongTokenType",
+]
 
 log = logging.getLogger("nightshift.github")
 
@@ -42,6 +49,29 @@ _PAGE_SIZE = 100
 
 class GitHubError(RuntimeError):
     """A GitHub request failed in a way the caller has to know about."""
+
+
+class WrongTokenType(GitHubError):
+    """The credential is valid and still cannot do this.
+
+    Its own type because the remedy is unlike every other failure here: not
+    waiting, not retrying, not skipping the repository, but issuing a different
+    kind of token. A run that hits this will hit it on every repository, so the
+    caller should stop rather than work through the list collecting the same
+    refusal.
+    """
+
+
+def _is_fine_grained_refusal(body: str) -> bool:
+    """GitHub's wording for "your token is the wrong shape".
+
+    A fine-grained token authenticates fine — ``/user`` answers 200 — and then
+    refuses to fork, because forking acts on a repository the token was never
+    scoped to and cannot be. The message says "Resource not accessible by
+    personal access token", which reads like a missing permission and sends you
+    off to add scopes that will not help.
+    """
+    return "not accessible by personal access token" in body.lower()
 
 
 class RateLimited(GitHubError):
@@ -279,6 +309,17 @@ class GitHubClient:
         body: dict[str, Any] = {"organization": organization} if organization else {}
         response = self._client.post(f"/repos/{repo}/forks", json=body)
         self._raise_if_rate_limited(response)
+        if response.status_code == 403 and _is_fine_grained_refusal(response.text):
+            raise WrongTokenType(
+                f"could not fork {repo}: this token cannot fork repositories it does "
+                "not own. Fine-grained personal access tokens are scoped to "
+                "repositories you already have, and a fork's source is by definition "
+                "somebody else's — GitHub refuses before scopes are even consulted.\n"
+                "  Use a classic token instead: Settings -> Developer settings -> "
+                "Personal access tokens -> Tokens (classic), with the single scope "
+                "`public_repo`. Nothing broader: `repo` would also hand over every "
+                "private repository you can see, and the fleet never needs one."
+            )
         if response.status_code not in {200, 202}:
             raise GitHubError(
                 f"could not fork {repo}: {response.status_code} {response.text[:200]}"
