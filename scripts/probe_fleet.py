@@ -233,7 +233,20 @@ def probe_one(
     # against anything, and a test that was green and goes red is the finding,
     # which is a sharper instrument than a single pass-or-fail bit.
     already_failing = baseline.failures
-    if baseline.tests_collected and len(already_failing) >= baseline.tests_collected:
+    passing = baseline.tests_collected - len(already_failing)
+
+    # How much green is actually standing behind a CLEAN. Loosening the rule to
+    # tolerate pre-existing failures was right; loosening it this far was not,
+    # and the first run under it produced three results that meant nothing:
+    # `code-examples-python` was called CLEAN with **no tests at all**, and
+    # `alerta` with 174 of its 194 tests already red. An upgrade verified by no
+    # tests is verified by nothing, and one verified by a tenth of a suite is
+    # barely better.
+    #
+    # A maintained project's suite does not arrive ninety percent red. When it
+    # looks that way the environment is wrong — alerta wants a database — and
+    # that is our limitation, which already has a name.
+    if passing <= 0:
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.BASELINE_RED,
@@ -243,6 +256,17 @@ def probe_one(
             # times the next question has been "why" with nothing to answer it.
             failing_output=baseline.output,
             notes=f"pytest exit {baseline.exit_code}; nothing in the suite passes",
+        )
+    if passing * 2 < baseline.tests_collected:
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.SUITE_UNRUNNABLE,
+            baseline_seconds=baseline.duration_seconds,
+            failing_output=baseline.output,
+            notes=(
+                f"only {passing} of {baseline.tests_collected} tests pass before we "
+                "change anything; the environment is wrong, not the repository"
+            ),
         )
 
     dependencies = read_dependencies(repo_path)
@@ -317,8 +341,8 @@ def probe_one(
         verify_seconds=verified.duration_seconds,
         failing_output="" if still_green else verified.output,
         notes=(
-            f"{baseline.tests_collected} tests at baseline, "
-            f"{len(already_failing)} already failing"
+            f"verified by {passing} passing tests "
+            f"({len(already_failing)} of {baseline.tests_collected} already failing)"
             + (
                 ""
                 if still_green

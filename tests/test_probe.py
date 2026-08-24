@@ -20,7 +20,7 @@ from scripts.probe_fleet import (
     benchmark_cases,
     summarise,
 )
-from services.worker.toolchain import TestReport, failing_ids
+from services.worker.toolchain import TestReport, collection_counts, failing_ids
 
 from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
 
@@ -256,3 +256,32 @@ def test_a_suite_where_nothing_passes_is_still_baseline_red() -> None:
     red offers no evidence either way and must not enter the denominator."""
     output = "\n".join(f"FAILED tests/test_{n}.py::test_{n}" for n in range(4)) + "\n4 failed"
     assert len(failing_ids(output)) == 4
+
+
+def test_an_upgrade_verified_by_no_tests_is_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`code-examples-python` was called CLEAN with zero tests at baseline.
+
+    Loosening the green-baseline rule to tolerate pre-existing failures was
+    right. Loosening it far enough that an empty suite counts as evidence was
+    the same false-green this project exists to refuse, arrived at from the
+    other direction.
+    """
+    from services.worker.toolchain import collection_counts
+
+    assert collection_counts("2 errors in 0.30s") == (0, 2)
+
+
+def test_a_suite_that_is_mostly_red_is_our_environment_not_their_code() -> None:
+    """alerta: 174 of 194 tests failing before we touched anything.
+
+    A maintained project does not ship a suite that is ninety percent red. When
+    it looks that way from inside our container, the container is what is wrong
+    — alerta's fixtures want a database — and calling the result CLEAN would put
+    a number in the denominator that twenty passing tests were holding up.
+    """
+    collected, _ = collection_counts("174 failed, 20 passed, 12 errors in 30.0s")
+    passing = collected - 174
+    assert collected == 194
+    assert passing * 2 < collected, "this is the shape that must not reach a verdict"
