@@ -1,0 +1,32 @@
+# Builds one service image with the repository root as the build context.
+#
+# `gcloud builds submit --tag` cannot express this: it assumes a Dockerfile at
+# the root of the context, and ours live at services/<name>/Dockerfile while
+# still needing the root as context so they can COPY packages/. A config file is
+# the supported way to say that, and it is why this file exists rather than a
+# longer command line.
+#
+#   gcloud builds submit --config infra/cloudbuild.yaml \
+#     --substitutions=_SERVICE=worker,_IMAGE=REGION-docker.pkg.dev/PROJECT/nightshift/worker:latest .
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - --file=services/${_SERVICE}/Dockerfile
+      - --tag=${_IMAGE}
+      # Reuses layers from the last build of this service, so a code change does
+      # not reinstall its dependencies. Ignored on the first build, when there is
+      # nothing to pull.
+      - --cache-from=${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1800s
