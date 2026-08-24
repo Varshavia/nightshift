@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from nightshift_core.fleet import (
+    BUILD_TOOLING,
     MAX_REPO_SIZE_KB,
     MIN_PINNED_DEPENDENCIES,
     POOL_SCHEMA,
@@ -279,3 +280,90 @@ def test_the_advisory_check_comes_after_the_cheap_refusals() -> None:
         application(license_id="CC-BY-4.0", advisories_checked=True, actionable_advisories=0)
     )
     assert "licence" in reason
+
+
+def test_no_search_query_uses_a_logical_operator_between_qualifiers() -> None:
+    """GitHub rejects it, and the rejection arrives as a 422 mid-run.
+
+    `topic:flask OR topic:django` looks reasonable and is not: OR applies to
+    free text only, and between qualifiers GitHub answers "The search contains
+    only logical operators without any search terms". Qualifiers in one query
+    are always ANDed, so the union has to be several searches merged on our
+    side. This test is what stops the tidier-looking version coming back.
+    """
+    from scripts.build_fork_pool import APPLICATION_QUERIES, DEFAULT_QUERY
+
+    for query in (DEFAULT_QUERY, *APPLICATION_QUERIES):
+        assert " OR " not in query, query
+        assert " NOT " not in query, query
+
+
+def test_the_application_queries_ask_for_one_framework_each() -> None:
+    from scripts.build_fork_pool import APPLICATION_QUERIES
+
+    topics = [q.rsplit("topic:", 1)[1] for q in APPLICATION_QUERIES]
+    assert sorted(topics) == ["django", "fastapi", "flask"]
+    for query in APPLICATION_QUERIES:
+        assert query.count("topic:") == 1, "two topics in one query means neither matches"
+
+
+def test_an_advisory_against_build_tooling_is_not_evidence_of_a_break() -> None:
+    """The count misleads, and one survey showed exactly how.
+
+    `apiflask` was proposed with three advisories — filelock, virtualenv and
+    wheel. Nothing imports those at runtime, so upgrading them cannot break
+    calling code, and this project is about upgrades that do. Ranked on the raw
+    count it sorted above repositories whose advisories were against Flask and
+    PyJWT, which is precisely backwards.
+    """
+    tooling_only = application(advisory_packages=("filelock", "virtualenv", "wheel"))
+    on_the_path = application(advisory_packages=("pyjwt", "cryptography", "black"))
+
+    assert tooling_only.call_path_advisories == 0
+    assert on_the_path.call_path_advisories == 2
+
+
+def test_the_tooling_list_leaves_out_anything_genuinely_ambiguous() -> None:
+    """A CLI really does break when click changes, and templates when jinja2 does.
+
+    The list earns its keep by being short. Every name added to it silently
+    removes a class of real break from consideration, so the ambiguous cases
+    belong outside it.
+    """
+    for package in ("click", "requests", "jinja2", "urllib3", "flask", "django"):
+        assert package not in BUILD_TOOLING
+
+
+def test_a_patch_release_fix_is_not_expected_to_break_anything() -> None:
+    """Why the first two measurable repositories both came back CLEAN.
+
+    OSV answers with the *lowest* version carrying the fix, and that is usually
+    a patch release. `urllib3 1.26.4 -> 1.26.5` closes a CVE and moves no API.
+    Dependabot handles those, and Nightshift has nothing to add to them.
+    """
+    candidate = application(major_jump_advisories=0, advisory_packages=("urllib3",))
+    assert candidate.likely_to_break == 0
+
+
+def test_a_major_jump_is_what_we_are_hunting() -> None:
+    """`pyjwt 1.7.1 -> 2.0.0` moved `jwt.decode`; every caller had to change."""
+    candidate = application(
+        major_jump_advisories=2,
+        advisory_packages=("pyjwt", "flask"),
+        advisory_jumps=("pyjwt 1.7.1 -> 2.0.0", "flask 1.1.2 -> 2.0.0"),
+    )
+    assert candidate.likely_to_break == 2
+
+
+def test_an_unparseable_version_does_not_claim_a_major_jump() -> None:
+    """Guessing "probably breaking" would put noise at the top of the list.
+
+    The top of the list is where noise costs the most: it decides which
+    repositories get forked, cloned and probed for twenty minutes each.
+    """
+    from scripts.build_fork_pool import _crosses_a_major
+
+    assert not _crosses_a_major("2024-01-01", "r2")
+    assert not _crosses_a_major("1.0.0", None)
+    assert _crosses_a_major("1.7.1", "2.0.0")
+    assert not _crosses_a_major("1.26.4", "1.26.5")

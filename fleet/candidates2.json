@@ -1,0 +1,2014 @@
+{
+  "query": [
+    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false topic:flask",
+    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false topic:django",
+    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false topic:fastapi"
+  ],
+  "assessed": 400,
+  "requested": 400,
+  "truncated": false,
+  "accepted": [
+    {
+      "repo": "manjurulhoque/django-job-portal",
+      "stars": 623,
+      "license_id": "MIT",
+      "pinned_dependencies": 116,
+      "size_kb": 9609,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 22,
+      "advisory_packages": [
+        "black",
+        "brotli",
+        "click",
+        "cryptography",
+        "django",
+        "djangorestframework-simplejwt",
+        "filelock",
+        "fonttools",
+        "idna",
+        "jinja2",
+        "jwcrypto",
+        "msgpack",
+        "pillow",
+        "pygments",
+        "pyjwt",
+        "pytest",
+        "requests",
+        "social-auth-app-django",
+        "sqlparse",
+        "urllib3",
+        "virtualenv",
+        "weasyprint"
+      ],
+      "keep": true,
+      "keep_reason": "22 advisories, the densest in the survey; a database may make it unrunnable, worth finding out"
+    },
+    {
+      "repo": "akornor/playlistor",
+      "stars": 675,
+      "license_id": "MIT",
+      "pinned_dependencies": 56,
+      "size_kb": 3746,
+      "manifests": [
+        "requirements/dev.txt"
+      ],
+      "actionable_advisories": 13,
+      "advisory_packages": [
+        "click",
+        "cryptography",
+        "django",
+        "filelock",
+        "idna",
+        "pip",
+        "pyjwt",
+        "requests",
+        "setuptools",
+        "sqlparse",
+        "urllib3",
+        "virtualenv",
+        "wheel"
+      ],
+      "keep": true,
+      "keep_reason": "django, pyjwt and cryptography, all on the call path"
+    },
+    {
+      "repo": "okpy/ok",
+      "stars": 368,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 44,
+      "size_kb": 26796,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 11,
+      "advisory_packages": [
+        "azure-storage-blob",
+        "bleach",
+        "flask",
+        "gunicorn",
+        "jinja2",
+        "pygments",
+        "pyjwt",
+        "pymysql",
+        "requests",
+        "selenium",
+        "werkzeug"
+      ],
+      "keep": false,
+      "keep_reason": "26 MB and a live MySQL; the advisories are good but the suite will not start"
+    },
+    {
+      "repo": "rsinger86/django-lifecycle",
+      "stars": 1404,
+      "license_id": "MIT",
+      "pinned_dependencies": 26,
+      "size_kb": 2054,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 9,
+      "advisory_packages": [
+        "click",
+        "django",
+        "djangorestframework",
+        "jinja2",
+        "markdown",
+        "pygments",
+        "pymdown-extensions",
+        "tornado",
+        "zipp"
+      ],
+      "keep": true,
+      "keep_reason": "a Django library with a pytest-django suite; the advisory is Django itself"
+    },
+    {
+      "repo": "thiagopena/djangoSIGE",
+      "stars": 466,
+      "license_id": "MIT",
+      "pinned_dependencies": 36,
+      "size_kb": 1740,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 8,
+      "advisory_packages": [
+        "cryptography",
+        "django",
+        "future",
+        "lxml",
+        "pillow",
+        "pyopenssl",
+        "signxml",
+        "sqlparse"
+      ],
+      "keep": true,
+      "keep_reason": "django, cryptography, lxml and pillow; every one a runtime dependency"
+    },
+    {
+      "repo": "Allen7D/mini-shop-server",
+      "stars": 831,
+      "license_id": "MIT",
+      "pinned_dependencies": 20,
+      "size_kb": 9019,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 7,
+      "advisory_packages": [
+        "flask",
+        "flask-cors",
+        "flask-httpauth",
+        "gunicorn",
+        "pytest",
+        "requests",
+        "werkzeug"
+      ],
+      "keep": true,
+      "keep_reason": "flask, flask-cors and werkzeug \u2014 a wide break surface across a Flask 1 to 2 move"
+    },
+    {
+      "repo": "docusign/code-examples-python",
+      "stars": 55,
+      "license_id": "MIT",
+      "pinned_dependencies": 35,
+      "size_kb": 2653,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 6,
+      "advisory_packages": [
+        "cryptography",
+        "flask",
+        "idna",
+        "python-dotenv",
+        "virtualenv",
+        "werkzeug"
+      ],
+      "keep": false,
+      "keep_reason": "sample code; no suite to serve as evidence"
+    },
+    {
+      "repo": "pallets-eco/flask-security",
+      "stars": 698,
+      "license_id": "MIT",
+      "pinned_dependencies": 25,
+      "size_kb": 8145,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 4,
+      "advisory_packages": [
+        "authlib",
+        "flask",
+        "jinja2",
+        "werkzeug"
+      ],
+      "keep": true,
+      "keep_reason": "flask, werkzeug, jinja2 and authlib under a mature pytest suite"
+    },
+    {
+      "repo": "mjhea0/flaskr-tdd",
+      "stars": 2343,
+      "license_id": "MIT",
+      "pinned_dependencies": 7,
+      "size_kb": 521,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 4,
+      "advisory_packages": [
+        "black",
+        "flask",
+        "gunicorn",
+        "pytest"
+      ],
+      "keep": true,
+      "keep_reason": "a test-driven-development tutorial, so the suite is the point and runs under bare pytest"
+    },
+    {
+      "repo": "vimalloc/flask-jwt-extended",
+      "stars": 1581,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 985,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 4,
+      "advisory_packages": [
+        "black",
+        "cryptography",
+        "flask",
+        "pyjwt"
+      ],
+      "keep": true,
+      "keep_reason": "pyjwt and cryptography in a JWT library; its own tests exercise the exact API a major PyJWT upgrade changes"
+    },
+    {
+      "repo": "yxhpy/comfy-prompt-studio",
+      "stars": 84,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 15128,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 4,
+      "advisory_packages": [
+        "flask",
+        "python-dotenv",
+        "python-socketio",
+        "requests"
+      ],
+      "keep": false,
+      "keep_reason": "15 MB and tied to ComfyUI"
+    },
+    {
+      "repo": "apiflask/apiflask",
+      "stars": 1132,
+      "license_id": "MIT",
+      "pinned_dependencies": 17,
+      "size_kb": 2320,
+      "manifests": [
+        "requirements/dev.txt"
+      ],
+      "actionable_advisories": 3,
+      "advisory_packages": [
+        "filelock",
+        "virtualenv",
+        "wheel"
+      ],
+      "keep": false,
+      "keep_reason": "all three advisories are filelock, virtualenv and wheel \u2014 build tooling, which upgrading breaks nothing"
+    },
+    {
+      "repo": "vitorfs/parsifal",
+      "stars": 513,
+      "license_id": "MIT",
+      "pinned_dependencies": 13,
+      "size_kb": 3393,
+      "manifests": [
+        "requirements/base.txt"
+      ],
+      "actionable_advisories": 3,
+      "advisory_packages": [
+        "django",
+        "pillow",
+        "requests"
+      ],
+      "keep": true,
+      "keep_reason": "a small Django application whose advisories are django, pillow and requests"
+    },
+    {
+      "repo": "silentsokolov/flask-thumbnails",
+      "stars": 60,
+      "license_id": "MIT",
+      "pinned_dependencies": 7,
+      "size_kb": 87,
+      "manifests": [
+        "requirements-dev.txt"
+      ],
+      "actionable_advisories": 3,
+      "advisory_packages": [
+        "black",
+        "flask",
+        "pillow"
+      ],
+      "keep": true,
+      "keep_reason": "flask and pillow; small, and Pillow's API changes break image code"
+    },
+    {
+      "repo": "PhialsBasement/LibreCrawl",
+      "stars": 875,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 563,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 3,
+      "advisory_packages": [
+        "flask",
+        "requests",
+        "urllib3"
+      ],
+      "keep": true,
+      "keep_reason": "urllib3, whose 1.x to 2.x transition is the best-known breaking upgrade in the ecosystem"
+    },
+    {
+      "repo": "SectorLabs/django-postgres-extra",
+      "stars": 762,
+      "license_id": "MIT",
+      "pinned_dependencies": 42,
+      "size_kb": 1213,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "black",
+        "pytest"
+      ],
+      "keep": false,
+      "keep_reason": "advisories only in black and pytest, and the suite wants a live PostgreSQL"
+    },
+    {
+      "repo": "alexferl/flask-simpleldap",
+      "stars": 182,
+      "license_id": "MIT",
+      "pinned_dependencies": 23,
+      "size_kb": 229,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "click",
+        "pyasn1"
+      ],
+      "keep": false,
+      "keep_reason": "needs an LDAP server; advisories in click and pyasn1"
+    },
+    {
+      "repo": "talkpython/data-driven-web-apps-with-flask",
+      "stars": 543,
+      "license_id": "MIT",
+      "pinned_dependencies": 19,
+      "size_kb": 3231,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "click",
+        "mako"
+      ],
+      "keep": false,
+      "keep_reason": "course material rather than an application"
+    },
+    {
+      "repo": "eerovil/TrackLater",
+      "stars": 125,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 579,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "gitpython",
+        "requests"
+      ],
+      "keep": false,
+      "keep_reason": "gitpython and requests; no evidence of a runnable suite"
+    },
+    {
+      "repo": "mrf345/flask_minify",
+      "stars": 81,
+      "license_id": "MIT",
+      "pinned_dependencies": 4,
+      "size_kb": 240,
+      "manifests": [
+        "requirements/test.txt"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "black",
+        "pytest"
+      ],
+      "keep": false,
+      "keep_reason": "advisories only in black and pytest; nothing on the call path"
+    },
+    {
+      "repo": "vchaptsev/cookiecutter-django-vue",
+      "stars": 610,
+      "license_id": "BSD-3-Clause",
+      "pinned_dependencies": 3,
+      "size_kb": 431,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "advisory_packages": [
+        "cookiecutter",
+        "pytest"
+      ],
+      "keep": false,
+      "keep_reason": "a project template; advisories in cookiecutter and pytest"
+    },
+    {
+      "repo": "vas3k/vas3k.club",
+      "stars": 933,
+      "license_id": "MIT",
+      "pinned_dependencies": 17,
+      "size_kb": 25623,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "advisory_packages": [
+        "django"
+      ],
+      "keep": false,
+      "keep_reason": "25 MB Django application with one advisory"
+    },
+    {
+      "repo": "jelmerdejong/flask-app-blueprint",
+      "stars": 220,
+      "license_id": "MIT",
+      "pinned_dependencies": 13,
+      "size_kb": 214,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "advisory_packages": [
+        "python-dotenv"
+      ],
+      "keep": false,
+      "keep_reason": "one advisory, in python-dotenv, which breaks nothing"
+    },
+    {
+      "repo": "tomimick/restpie3",
+      "stars": 91,
+      "license_id": "MIT",
+      "pinned_dependencies": 10,
+      "size_kb": 603,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 1,
+      "advisory_packages": [
+        "requests"
+      ],
+      "keep": false,
+      "keep_reason": "one advisory, in requests"
+    },
+    {
+      "repo": "django-webpack/django-webpack-loader",
+      "stars": 2540,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 9449,
+      "manifests": [
+        "requirements-dev.txt"
+      ],
+      "actionable_advisories": 1,
+      "advisory_packages": [
+        "django"
+      ],
+      "keep": false,
+      "keep_reason": "already probed: SUITE_UNRUNNABLE, its suite runs from tests/ under tox"
+    }
+  ],
+  "rejected": [
+    {
+      "repo": "flaskbb/flaskbb",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "supabase/supabase-py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "miguelgrinberg/Flask-Migrate",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "python-restx/flask-restx",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "greyli/helloflask",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabston/TradingView-Webhook-Bot",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pallets-eco/flask-wtf",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "marshmallow-code/webargs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "spiral-project/ihatemoney",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "sloria/environs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "slackapi/bolt-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "miguelgrinberg/Flask-HTTPAuth",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "marshmallow-code/apispec",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "alisaifee/flask-limiter",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dannymcc/bluehood",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "TypeError/secure",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "zenodo/zenodo",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "pallets-eco/flask-caching",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "cle-b/httpdbg",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "psincraian/pepy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "marshmallow-code/flask-marshmallow",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "logamee/lin-cms-flask",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "flask-dashboard/Flask-MonitoringDashboard",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "blacklanternsecurity/badsecrets",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "litestar-org/advanced-alchemy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "coleifer/flask-peewee",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nickjj/docker-flask-example",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "liwanlei/FXTest",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "marshmallow-code/flask-smorest",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "gouthambs/Flask-Blogging",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pallets-eco/flask-mail",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pallets-eco/flask-session",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mr-fatalyst/fastopenapi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pytest-dev/pytest-flask",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Lost-MSth/Arcaea-server",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "hackersandslackers/flask-blueprint-tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "sentriz/betanin",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "openwrt/asu",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "pallets-eco/flask-pydantic",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "maldoinc/wireup",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "elastic/apm-agent-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "hynek/svcs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ErdemOzgen/Python-developer-roadmap",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lyric777/Book-Management-System",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "hackersandslackers/flask-sqlalchemy-tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "tthn0/Spotify-Readme",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "beijingcao/binance-deribit-btc",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "whiskyechobravo/kerko",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "0b01001001/spectree",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "meadsteve/lagom",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "junqiangchen/PytorchDeepLearing",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "coleifer/scout",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "sec-an/TV_Spider",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "cenobites/flask-jsonrpc",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "helloflask/watchlist",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "physhik/ecg-mit-bih",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "luolingchun/flask-openapi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "cu/silicon",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "HarshShah1997/Shopping-Cart",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "howarder3/ChatGPT-Linebot-using-python-flask-on-vercel",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "dannymcc/may",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mikeckennedy/jinja_partials",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pallets-eco/flask-rq",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pallets-eco/flask-classful",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "shonenada/flask-rbac",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "ssube/onnx-web",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DiljotSG/MCU-Countdown",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Kartones/flask-calendar",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "rollbar/pyrollbar",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "apitally/apitally-py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sachelsout/infra-lab",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "bepasty/bepasty-server",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "toddbirchard/flasklogin-tutorial",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "gramps-project/gramps-web-api",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "tiagocoutinho/multivisor",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Haohao-end/GPT-2-Based-Medical-Dialogue-System",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "nando0x/ProspectOS",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "6wheel/Ortho",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "flask-extensions/Flask-SimpleLogin",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yangyuexiong/Flask_BestPractices",
+      "reason": "licence MPL-2.0 does not permit this"
+    },
+    {
+      "repo": "openzim/zimfarm",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "ptbsare/anx-calibre-manager",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "SubhrajitPrusty/wallgen",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thecraftman/Deploy-a-NLP-Similarity-API-using-Docker",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "auth0-samples/auth0-python-web-app",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "hillerliao/RSSHub-python",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "AccordBox/python-webpack-boilerplate",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "linke-ai/hermes-agent-team",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dtiesling/flask-muck",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "RaffaDNDM/HacknDroid",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "afourmy/pyTSP",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "LAVARONG/wechat-automation-api",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "vanthree31/PaperLens",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Yepoleb/gogdb",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "base26-labs/appkernel",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "rtzll/flask-todolist",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "loveisbl1nd/linksift",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "graup/flask-restless-security",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Vanguard-s/Electronic-Component-Sorter",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Kozea/Flask-WeasyPrint",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mentatpsi/OSGenome",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "salimane/flask-mvc",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "yigitkonur/cli-bulk-caller",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "teal33t/poopak",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "4GeeksAcademy/flask-rest-hello",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "opentracing-contrib/python-flask",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "graphql-python/graphql-server",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "grregis/MuckScraper",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "bryaneaton/flask-restful",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "Karan-Malik/Chatbot",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "miguelgrinberg/retrofun",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "MasoniteFramework/exceptionite",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dev-fYnn/Winget-Repo",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "melihcolpan/flask-restful-login",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "x1958075990h-pixel/RuView_Radar_Lite",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Ambro17/slackify",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "eggpi/citationhunt",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pawamoy/shellhistory",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "NBA-Betting/NBA_AI",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "ChinmayShringi/MicroFish-En",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "pywebdriver/pywebdriver",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "zfleeman/ffmpeg4discord",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "flowcase/flowcase",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "auth0-samples/auth0-python-api-samples",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "strongbugman/apiman",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bboe/flask-image-uploader",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thetobysiu/Deepstory",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "guibranco/progressbar",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "rzfeeser/simpleflaskservice",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "wink-wink-wink555/MarkiNote",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "defnngj/learning-API-test",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "blackhaiyu-sudo/specrag",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "hackersandslackers/flask-session-tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "marcus67/little_brother",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "jboirazian/LuneForge",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "bharathganji/pikpak-plus",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "4Catalyzer/flask-resty",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bugsnag/bugsnag-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dan246/VisionFlow",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "TheD0ubleC/NeoAI",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "render-examples/flask-hello-world",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "opendatacube/datacube-ows",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "alialsartawi7-sketch/ghosttrace",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "corbado/corbado-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pylipp/financeager",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "hoangsonww/AI-Agents-Orchestrator",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "shopyo/shopyo",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "agarbato/unicloud",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "DeaconDesperado/flask_mab",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "fedora-copr/flask-whooshee",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Whapi-Cloud/python-whatsapp-chatbot",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "whiskyechobravo/kerkoapp",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "quantumcore/NetworkStealer",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "ADITYA-KUMAR-2358/Ask-Mirage-2.0",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "liquidguru/docker-updater",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "hasgeek/coaster",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "metabrainz/critiquebrainz",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "kitaki-Ciallo/etf-national-tracker",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "abilian/flask-vite",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "rclement/business-card-generator",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "sloria/flask-konch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "TTWShell/hobbit-core",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "danylo829/containery",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "iburakov/my-itmo-ru-to-ical",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Varn1t/TraffiQ",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "JanisV/release-bot",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kby-ai/FaceRecognition-Docker",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Ruulian/wconsole_extractor",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "candidtim/cookiecutter-flask-minimal",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mblackgeo/flask-cognito-lib",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Angrido/Lidarr-YouTube-Downloader",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ferretgeek/cliproxyapi-dashboard",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ramonpaolo/api-b3",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "kby-ai/FaceLivenessDetection-Docker",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "pallets-eco/flask-sqlalchemy-lite",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "deep-learning-indaba/Baobab",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lzjun567/flask-siwadoc",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kilerhg/Python-Studies",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mamgad/DVBLab",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "lrhtony/pixiv",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "calesthio/OptionsCanvas",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "prismatex/python-manager",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "nopp/alertmanager-webhook-telegram-python",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "Oratorian/emby-watchparty",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "arXiv/arxiv-base",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "equinor/webviz-config",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Nookipedia/nookipedia-api",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Gokuld102/ai-traffic-signal-optimization",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "chiupam/invoiceOCR",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "TrainWithShubham/python-for-devops",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "so1n/pait",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "gaw89/dash-flask-login",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "YashIndane/webcube",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "mohammed97ashraf/LLM_Agri_Bot",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Gurupatil0003/01_Flask_Tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "sh4nks/flask-plugins",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "kwiersma/flask-celery-sqlalchemy",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "Indhu27-pixel/Labour-Law-Violation-System",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "sunary/flask-optimize",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "treeben77/discord-oauth2.py",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "TeddiO/pySteamSignIn",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "hasgeek/funnel",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "nyu-devops/lab-flask-tdd",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DozaVisuals/doza-assist",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DarkflameUniverse/NexusDashboard",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "alight659/ClipBin",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "JustVugg/judicex",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "daniel-c-silva/SynthPons",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jschneier/django-storages",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ciur/papermerge",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "tfranzel/drf-spectacular",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "opencve/opencve",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "evansd/whitenoise",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-commons/django-unicorn",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jazzband/django-push-notifications",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kmmbvnr/django-fsm",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mirumee/ariadne",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "zostera/django-bootstrap3",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Suor/django-cacheops",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "vintasoftware/django-react-boilerplate",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wemake-services/wemake-django-template",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wooey/Wooey",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "brightbeanxyz/brightbean-studio",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "python-social-auth/social-app-django",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "Kludex/mangum",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabiocaccamo/django-admin-interface",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jieter/django-tables2",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "dfunckt/django-rules",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "typeddjango/django-stubs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-notifications/django-notifications",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "photonixapp/photonix",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "rq/django-rq",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "celery/django-celery-beat",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "django-wiki/django-wiki",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "doableware/djongo",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "anymail/django-anymail",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "twtrubiks/docker-tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jazzband/django-two-factor-auth",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yourlabs/django-autocomplete-light",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "iMerica/dj-rest-auth",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-cms/django-filer",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "django-commons/django-polymorphic",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "alanjds/drf-nested-routers",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dj-stripe/dj-stripe",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "timonweb/django-tailwind",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-hijack/django-hijack",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "django-helpdesk/django-helpdesk",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mdn/django-locallibrary-tutorial",
+      "reason": "licence CC0-1.0 does not permit this"
+    },
+    {
+      "repo": "pyeventsourcing/eventsourcing",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-commons/django-prometheus",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dj-bolt/django-bolt",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "agconti/cookiecutter-django-rest",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pytest-dev/pytest-django",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "SmileyChris/django-countries",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nickjj/docker-django-example",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "deschler/django-modeltranslation",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "noripyt/django-cachalot",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mbi/django-simple-captcha",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "codingjoe/django-health-check",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jazzband/django-auditlog",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "arrobalytics/django-ledger",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "wemake-services/django-modern-rest",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bennylope/django-organizations",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jazzband/django-analytical",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wq/django-rest-pandas",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "adamchainz/django-upgrade",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Hopetree/izone",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "django-treebeard/django-treebeard",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jazzband/django-payments",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "wemake-services/django-split-settings",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wrabit/django-cotton",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "rpkilby/jsonfield",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mbi/django-rosetta",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "line/promgen",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nsupdate-info/nsupdate.info",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "openwisp/django-rest-framework-gis",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Archmonger/django-dbbackup",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "caoqianming/django-vue-admin",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "iommirocks/iommi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "RealmTeam/django-rest-framework-social-oauth2",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "django-recaptcha/django-recaptcha",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "aaugustin/django-sesame",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "zostera/django-bootstrap4",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "model-bakers/model_bakery",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "macropin/django-registration",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "djangopackages/djangopackages",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "neutronX/django-markdownx",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "jazzband/django-newsletter",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "eitchtee/WYGIWYH",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "getludic/ludic",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "egorsmkv/simple-django-login-and-register",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "xieyumc/YuYuWechat",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "jrief/django-admin-sortable2",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "heroku/python-getting-started",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "shacker/django-todo",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "soynatan/django-easy-audit",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "jazzband/django-avatar",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "crccheck/django-object-actions",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "RealOrangeOne/django-tasks",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabiocaccamo/django-treenode",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "xtrinch/fcm-django",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "celery/django-celery-results",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "theatlantic/django-nested-admin",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "revsys/django-friendship",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "raveberry/raveberry",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "silentsokolov/django-admin-rangefilter",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "HuQi2018/BiSheServer",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "django-parler/django-parler",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "spookylukey/django-paypal",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jazzband/django-user-sessions",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "iamtelescope/telescope",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "makinacorpus/django-safedelete",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "carltongibson/neapolitan",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Hipo/drf-extra-fields",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pseudo-r/Public-ESPN-API",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "richardbarran/django-photologue",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "versun/RSSBox",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "adamchainz/django-browser-reload",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabiocaccamo/django-colorfield",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "APSL/puput",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "romgar/django-dirtyfields",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "NilCoalescing/djangochannelsrestframework",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "hbakri/django-ninja-crud",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "AmbitionEng/django-pgtrigger",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DarrenOfficial/dpaste",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "diefenbach/django-lfs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "revsys/django-test-plus",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mozilla/django-csp",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabiocaccamo/django-extra-settings",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DjangoCRM/django-crm",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "3YOURMIND/django-migration-linter",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "tetra-framework/tetra",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ellmetha/django-machina",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "djaodjin/djaodjin-saas",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "ali-zahedi/az-iranian-bank-gateways",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "RamezIssac/django-slick-reporting",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "eadwinCode/django-ninja-extra",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "GibbsConsulting/django-plotly-dash",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "adamchainz/django-mysql",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "KoalixSwitzerland/koalixcrm",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "v55448330/lazy-balancer",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mixxorz/slippers",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wemake-services/django-test-migrations",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "tbicr/django-pg-zero-downtime-migrations",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "signorrayan/RedTeam_toolkit",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "danihodovic/celery-exporter",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "apragacz/django-rest-registration",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mwarkentin/django-watchman",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "AmbitionEng/django-pghistory",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "typeddjango/djangorestframework-stubs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jrobichaud/django-structlog",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fabiocaccamo/django-maintenance-mode",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "meeb/django-distill",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "manjurulhoque/django-social-network",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "strawberry-graphql/strawberry-django",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "tough-dev-school/education-backend",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nephila/djangocms-blog",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ruddra/docker-django",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "simonw/django-sql-dashboard",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-cms/django-sekizai",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "saxix/django-concurrency",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "epicserve/django-base-site",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "furlongm/patchman",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "juanifioren/django-oidc-provider",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "GetStream/stream-django",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-getpaid/django-getpaid",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "twtrubiks/docker-django-nginx-uwsgi-postgres-tutorial",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jrief/django-formset",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "anexia-it/django-rest-passwordreset",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "inducer/relate",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "vintasoftware/django-ai-assistant",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lavr/python-emails",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "simonw/simonwillisonblog",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jazzband/wagtailmenus",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "torchbox/django-pattern-library",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    }
+  ],
+  "review": {
+    "reviewed_by": "hand, before forking",
+    "note": "Selected on which distribution the advisory is against, not on how many there are. An advisory against flask, werkzeug, pyjwt, cryptography, jinja2, django, pillow or urllib3 is against something the repository calls, so upgrading it can break calling code \u2014 which is the entire subject of this project. An advisory against black, pytest, pip, virtualenv, wheel or filelock is against build tooling and can break nothing. apiflask advertised three advisories and every one was the second kind."
+  }
+}

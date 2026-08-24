@@ -93,7 +93,12 @@ class ProbeVerdict(StrEnum):
     PROBE_ERROR = "PROBE_ERROR"
     #: pytest collected nothing. A repository with no tests cannot be its own evidence.
     NO_TESTS = "NO_TESTS"
-    #: The suite was already failing before we touched anything.
+    #: There is a suite, and we could not assemble it — a missing settings module,
+    #: fixtures wanting a database, a project driven by tox rather than pytest.
+    #: Our limitation, stated as one, and deliberately not counted as the
+    #: repository having arrived broken.
+    SUITE_UNRUNNABLE = "SUITE_UNRUNNABLE"
+    #: The suite ran and was already failing before we touched anything.
     BASELINE_RED = "BASELINE_RED"
     #: Vulnerable, but no published fix to upgrade to.
     NO_FIX_AVAILABLE = "NO_FIX_AVAILABLE"
@@ -199,11 +204,26 @@ def probe_one(
             verdict=ProbeVerdict.NO_TESTS,
             baseline_seconds=baseline.duration_seconds,
         )
+    if baseline.collection_failed:
+        # Before an upgrade this is our environment, not their code. Kept out of
+        # BASELINE_RED so the denominator is not padded with our own failures.
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.SUITE_UNRUNNABLE,
+            baseline_seconds=baseline.duration_seconds,
+            failing_output=baseline.output,
+            notes="collection failed before anything was changed; "
+            + "; ".join(sandbox.install_log[-4:]),
+        )
     if not baseline.passed:
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.BASELINE_RED,
             baseline_seconds=baseline.duration_seconds,
+            # Recorded rather than discarded. Three times now a verdict has been
+            # written down without the output that would explain it, and three
+            # times the next question has been "why" with nothing to answer it.
+            failing_output=baseline.output,
             notes=f"pytest exit {baseline.exit_code}",
         )
 
@@ -390,6 +410,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             "\nno upgrade was applied to a green baseline, so the break rate is "
             "unmeasured rather than zero. The reasons are in the file."
         )
+
+    # The funnel, which is a finding in its own right and the number the fleet is
+    # sized from: how many repositories must be surveyed to reach one that can be
+    # measured at all. Ours is far worse than anyone assumes before running it.
+    ours = summary.counts[str(ProbeVerdict.SUITE_UNRUNNABLE)] + summary.counts[
+        str(ProbeVerdict.PROBE_ERROR)
+    ]
+    theirs = (
+        summary.counts[str(ProbeVerdict.UNBUILDABLE)]
+        + summary.counts[str(ProbeVerdict.BASELINE_RED)]
+        + summary.counts[str(ProbeVerdict.NO_TESTS)]
+    )
+    nothing_to_do = (
+        summary.counts[str(ProbeVerdict.NOT_AFFECTED)]
+        + summary.counts[str(ProbeVerdict.NO_FIX_AVAILABLE)]
+    )
+    print(
+        f"\nfunnel: {summary.upgrades_attempted} of {summary.probed} reached the measurement"
+        f"  ·  {ours} lost to our own limits"
+        f"  ·  {theirs} to the repository's state"
+        f"  ·  {nothing_to_do} had nothing to fix"
+    )
     print(f"written to {out}")
     return 0
 

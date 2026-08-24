@@ -29,7 +29,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Self
 
+from packaging.utils import canonicalize_name
+
 __all__ = [
+    "BUILD_TOOLING",
     "MAX_REPO_SIZE_KB",
     "MIN_PINNED_DEPENDENCIES",
     "PERMISSIVE_LICENCES",
@@ -50,6 +53,33 @@ POOL_SCHEMA = 1
 #: properly is a conversation, and a script should not be having conversations.
 PERMISSIVE_LICENCES: frozenset[str] = frozenset(
     {"mit", "bsd-2-clause", "bsd-3-clause", "apache-2.0", "isc", "0bsd", "unlicense"}
+)
+
+#: Distributions a project builds or tests *with* rather than calls. An
+#: advisory against one of these is worth fixing and is not evidence that an
+#: upgrade would break anything, because nothing imports them at runtime.
+#:
+#: Short and specific on purpose. Anything genuinely ambiguous — `requests`,
+#: `jinja2`, `click` — stays out: a CLI really does break when click changes.
+BUILD_TOOLING: frozenset[str] = frozenset(
+    {
+        "black",
+        "build",
+        "coverage",
+        "filelock",
+        "flake8",
+        "isort",
+        "mypy",
+        "pip",
+        "pip-tools",
+        "pytest",
+        "ruff",
+        "setuptools",
+        "tox",
+        "twine",
+        "virtualenv",
+        "wheel",
+    }
 )
 
 #: Below this, a repository is not really pinning — it has one or two incidental
@@ -94,6 +124,49 @@ class Candidate:
     #: Which distributions they are against, so a reviewer can see at a glance
     #: whether the finding is a real dependency or a linter in a dev extra.
     advisory_packages: tuple[str, ...] = ()
+    #: The transitions themselves, as ``"pyjwt 1.7.1 -> 2.0.0"``. Kept in full
+    #: because the size of the jump is the whole signal, and a reviewer reading
+    #: the proposal should not have to look them up.
+    advisory_jumps: tuple[str, ...] = ()
+    #: How many of those cross a major version. See :meth:`likely_to_break`.
+    major_jump_advisories: int = 0
+
+    @property
+    def call_path_advisories(self) -> int:
+        """Advisories against something the repository actually calls.
+
+        The count alone misleads. One survey put `apiflask` forward with three
+        advisories, and all three were against ``filelock``, ``virtualenv`` and
+        ``wheel`` — build tooling, which the code never imports and upgrading
+        cannot break. Meanwhile ``flask-jwt-extended`` showed four, of which
+        ``pyjwt`` and ``cryptography`` are the library's entire subject matter.
+
+        Nightshift is about upgrades that break calling code, so this is the
+        number selection should rank on.
+        """
+        return sum(
+            1
+            for package in self.advisory_packages
+            if str(canonicalize_name(package)) not in BUILD_TOOLING
+        )
+
+    @property
+    def likely_to_break(self) -> int:
+        """Advisories whose fix is a major version away, on the call path.
+
+        The sharpest predictor we have, and it took two rounds of measurement to
+        see it. OSV answers with the *lowest* version that carries the fix, so
+        most advisories resolve to a patch release: `urllib3 1.26.4 -> 1.26.5`
+        closes a CVE and breaks nothing, which is why the first two repositories
+        that reached the measurement both came back CLEAN. Dependabot handles
+        those perfectly well, and this project has nothing to add to them.
+
+        Nightshift's subject is the other kind — where the only published fix is
+        two majors ahead, the API moved underneath the caller, and the pull
+        request needs code changes nobody has written yet. Selecting for that is
+        selecting for the work we exist to do.
+        """
+        return self.major_jump_advisories
 
     @property
     def normalised_licence(self) -> str:

@@ -37,8 +37,12 @@ if __package__ in {None, ""}:  # pragma: no cover - depends on how it was invoke
     _root = Path(__file__).resolve().parent.parent
     sys.path[:0] = [str(_root), str(_root / "packages")]
 
+from packaging.utils import canonicalize_name
+from packaging.version import InvalidVersion, Version
+
 from nightshift_core.config import load_env_file
 from nightshift_core.fleet import (
+    BUILD_TOOLING,
     Candidate,
     FleetEntry,
     FleetPool,
@@ -95,9 +99,15 @@ DEFAULT_QUERY = (
 #: repository that depends on a web framework is an application almost by
 #: definition — it pins, it has a suite that runs on CPU in seconds, and its
 #: dependencies are exactly the ones advisories are published against.
-APPLICATION_QUERY = (
-    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false "
-    "topic:flask OR topic:django OR topic:fastapi"
+#: Three searches rather than one, because GitHub cannot express this as one.
+#: ``OR`` applies to free text only; between qualifiers it is a validation error
+#: — "The search contains only logical operators without any search terms" —
+#: and the qualifiers in a single query are always ANDed, so `topic:flask
+#: topic:django` asks for repositories that are somehow both. The union has to
+#: be assembled on our side.
+_APPLICATION_BASE = "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false"
+APPLICATION_QUERIES: tuple[str, ...] = tuple(
+    f"{_APPLICATION_BASE} topic:{topic}" for topic in ("flask", "django", "fastapi")
 )
 
 #: Path shapes that mean a machine can find the suite.
@@ -149,6 +159,9 @@ def assess(
             # tree request as "no tests".
             log.warning("could not check advisories for %s: %s", meta.full_name, exc)
 
+    jumps = tuple(
+        f"{v.package} {v.installed_version} -> {v.fixed_version}" for v in advisories
+    )
     return Candidate(
         repo=meta.full_name,
         stars=meta.stars,
@@ -162,7 +175,31 @@ def assess(
         advisories_checked=checked,
         actionable_advisories=len(advisories),
         advisory_packages=tuple(dict.fromkeys(v.package for v in advisories)),
+        advisory_jumps=jumps,
+        major_jump_advisories=sum(
+            1
+            for v in advisories
+            if str(canonicalize_name(v.package)) not in BUILD_TOOLING
+            and _crosses_a_major(v.installed_version, v.fixed_version)
+        ),
     )
+
+
+def _crosses_a_major(installed: str, fixed: str | None) -> bool:
+    """Whether the only published fix is a major version away.
+
+    Unparseable versions answer False rather than raising. A survey is not the
+    place to discover that one advisory in four hundred carries a date where a
+    version should be, and guessing "probably breaking" about a version nobody
+    can compare would put noise at the top of the list — which is the one place
+    noise costs the most.
+    """
+    if not fixed:
+        return False
+    try:
+        return Version(fixed).major > Version(installed).major
+    except InvalidVersion:
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -172,9 +209,23 @@ def assess(
 
 def run_propose(args: argparse.Namespace, token: str) -> int:
     osv = None if args.no_advisories else OSVClient()
+    queries: list[str] = args.query if isinstance(args.query, list) else [args.query]
     with GitHubClient(token) as client:
-        log.info("searching: %s", args.query)
-        found = client.search_repositories(args.query, limit=args.search)
+        # Several searches merged into one survey. Deduplicated across queries as
+        # well as within them: a Django project tagged `fastapi` too would
+        # otherwise be assessed twice, forked twice, and counted twice in every
+        # number computed over the pool.
+        found: list[RepoMetadata] = []
+        seen: set[str] = set()
+        for query in queries:
+            log.info("searching: %s", query)
+            for meta in client.search_repositories(query, limit=args.search):
+                if meta.full_name not in seen:
+                    seen.add(meta.full_name)
+                    found.append(meta)
+            if len(found) >= args.search:
+                break
+        found = found[: args.search]
         log.info("assessing %d repositories", len(found))
         candidates: list[Candidate] = []
         truncated = False
@@ -201,7 +252,15 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     # Most advisories first, so that `--limit` keeps the repositories with the
     # most for the fleet to do rather than whichever GitHub happened to sort
     # highest by stars.
-    accepted.sort(key=lambda c: (-c.actionable_advisories, -c.pinned_dependencies))
+    # Ranked on advisories against something the repository calls, not on the
+    # raw count: apiflask advertised three and every one was build tooling.
+    # Ordered by what we are actually hunting: advisories whose only fix is a
+    # major version away. Two repositories reached the measurement on the raw
+    # count and both came back CLEAN, because OSV answers with the lowest
+    # fixed version and that is usually a patch release.
+    accepted.sort(
+        key=lambda c: (-c.likely_to_break, -c.call_path_advisories, -c.actionable_advisories)
+    )
     accepted = accepted[: args.limit]
 
     out = Path(args.out)
@@ -209,7 +268,7 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     out.write_text(
         json.dumps(
             {
-                "query": args.query,
+                "query": queries,
                 "assessed": len(candidates),
                 "requested": len(found),
                 # A run cut short by a rate limit surveyed part of the world.
@@ -225,6 +284,9 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
                         "size_kb": c.size_kb,
                         "manifests": list(c.manifests),
                         "actionable_advisories": c.actionable_advisories,
+                        "call_path_advisories": c.call_path_advisories,
+                        "major_jump_advisories": c.major_jump_advisories,
+                        "advisory_jumps": list(c.advisory_jumps),
                         "advisory_packages": list(c.advisory_packages),
                         "keep": True,
                     }
@@ -250,8 +312,9 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
         print(
-            f"  {candidate.repo:<40} {candidate.actionable_advisories:>3} advisories"
-            f"  {candidate.pinned_dependencies:>4} pins  {candidate.size_kb // 1000:>4} MB"
+            f"  {candidate.repo:<40} {candidate.likely_to_break:>2} major jumps"
+            f"  {candidate.call_path_advisories:>3} on the call path"
+            f"  ({candidate.actionable_advisories:>2} total)"
         )
     if len(accepted) > 20:
         print(f"  ... and {len(accepted) - 20} more")
@@ -344,9 +407,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     proposer.add_argument(
         "--applications",
         action="store_const",
-        const=APPLICATION_QUERY,
+        const=list(APPLICATION_QUERIES),
         dest="query",
-        help="ask for web applications by topic instead of excluding what we do not want",
+        help="three searches — flask, django, fastapi — merged; asks for what we want "
+        "rather than excluding what we do not",
     )
     proposer.add_argument("--search", type=int, default=200, help="how many to assess")
     proposer.add_argument("--limit", type=int, default=50, help="how many to propose")
