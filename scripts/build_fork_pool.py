@@ -221,7 +221,9 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     # Most advisories first, so that `--limit` keeps the repositories with the
     # most for the fleet to do rather than whichever GitHub happened to sort
     # highest by stars.
-    accepted.sort(key=lambda c: (-c.actionable_advisories, -c.pinned_dependencies))
+    # Ranked on advisories against something the repository calls, not on the
+    # raw count: apiflask advertised three and every one was build tooling.
+    accepted.sort(key=lambda c: (-c.call_path_advisories, -c.actionable_advisories))
     accepted = accepted[: args.limit]
 
     out = Path(args.out)
@@ -245,6 +247,7 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
                         "size_kb": c.size_kb,
                         "manifests": list(c.manifests),
                         "actionable_advisories": c.actionable_advisories,
+                        "call_path_advisories": c.call_path_advisories,
                         "advisory_packages": list(c.advisory_packages),
                         "keep": True,
                     }
@@ -270,8 +273,8 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     print(f"\nassessed {len(candidates)}, proposing {len(accepted)}")
     for candidate in accepted[:20]:
         print(
-            f"  {candidate.repo:<40} {candidate.actionable_advisories:>3} advisories"
-            f"  {candidate.pinned_dependencies:>4} pins  {candidate.size_kb // 1000:>4} MB"
+            f"  {candidate.repo:<40} {candidate.call_path_advisories:>3} on the call path"
+            f"  ({candidate.actionable_advisories:>2} total)  {candidate.size_kb // 1000:>4} MB"
         )
     if len(accepted) > 20:
         print(f"  ... and {len(accepted) - 20} more")

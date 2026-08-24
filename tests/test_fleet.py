@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from nightshift_core.fleet import (
+    BUILD_TOOLING,
     MAX_REPO_SIZE_KB,
     MIN_PINNED_DEPENDENCIES,
     POOL_SCHEMA,
@@ -304,3 +305,30 @@ def test_the_application_queries_ask_for_one_framework_each() -> None:
     assert sorted(topics) == ["django", "fastapi", "flask"]
     for query in APPLICATION_QUERIES:
         assert query.count("topic:") == 1, "two topics in one query means neither matches"
+
+
+def test_an_advisory_against_build_tooling_is_not_evidence_of_a_break() -> None:
+    """The count misleads, and one survey showed exactly how.
+
+    `apiflask` was proposed with three advisories — filelock, virtualenv and
+    wheel. Nothing imports those at runtime, so upgrading them cannot break
+    calling code, and this project is about upgrades that do. Ranked on the raw
+    count it sorted above repositories whose advisories were against Flask and
+    PyJWT, which is precisely backwards.
+    """
+    tooling_only = application(advisory_packages=("filelock", "virtualenv", "wheel"))
+    on_the_path = application(advisory_packages=("pyjwt", "cryptography", "black"))
+
+    assert tooling_only.call_path_advisories == 0
+    assert on_the_path.call_path_advisories == 2
+
+
+def test_the_tooling_list_leaves_out_anything_genuinely_ambiguous() -> None:
+    """A CLI really does break when click changes, and templates when jinja2 does.
+
+    The list earns its keep by being short. Every name added to it silently
+    removes a class of real break from consideration, so the ambiguous cases
+    belong outside it.
+    """
+    for package in ("click", "requests", "jinja2", "urllib3", "flask", "django"):
+        assert package not in BUILD_TOOLING
