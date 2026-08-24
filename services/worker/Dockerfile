@@ -9,8 +9,26 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# `git` and `ca-certificates` are ours. Everything after is somebody else's
+# build dependency, and the list comes from a measurement rather than a guess:
+# PowerDNS-Admin — a Flask application with 43 pinned dependencies and a real
+# suite — was recorded UNBUILDABLE solely because `pkg-config --exists
+# mysqlclient` failed. An image without these libraries does not measure how
+# much of the ecosystem the fleet can repair; it measures its own contents, and
+# every repository it cannot build is one it quietly declines to help.
+#
+# Deliberately identical to infra/probe.Dockerfile. The probe exists to predict
+# what the fleet will do, and it cannot do that from a richer environment than
+# the fleet has.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends \
+      git ca-certificates \
+      build-essential pkg-config \
+      default-libmysqlclient-dev \
+      libpq-dev \
+      libxml2-dev libxslt1-dev \
+      libffi-dev libssl-dev \
+      libjpeg-dev zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first so that a code change does not invalidate the layer.

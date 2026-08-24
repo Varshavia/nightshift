@@ -8,6 +8,7 @@ project's central claim is wrong, so it gets its own tests.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -157,3 +158,51 @@ def test_a_missing_pool_says_how_to_build_one(
 
     assert code == 2
     assert "build_fork_pool.py" in capsys.readouterr().err
+
+
+def test_every_verdict_is_written_down_not_only_the_breaking_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first real run wrote 439 bytes and explained nothing.
+
+    Six repositories failed before an upgrade was ever applied, each with a
+    `notes` saying why, and the output file kept none of it because only
+    BREAKING results were serialised. A run that finds no cases is the run most
+    in need of diagnosis, so it is the run that must record the most.
+    """
+    monkeypatch.setattr(
+        probe_fleet,
+        "probe_fleet",
+        lambda repos: [
+            ProbeResult(repo="a/b", verdict=ProbeVerdict.UNBUILDABLE, notes="no such extra"),
+        ],
+    )
+    out = tmp_path / "cases.json"
+
+    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out)])
+
+    written = json.loads(out.read_text(encoding="utf-8"))
+    assert written["cases"] == []
+    assert written["results"][0]["notes"] == "no such extra"
+
+
+def test_an_unmeasured_break_rate_does_not_read_as_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        probe_fleet,
+        "probe_fleet",
+        lambda repos: [ProbeResult(repo="a/b", verdict=ProbeVerdict.BASELINE_RED)],
+    )
+
+    probe_fleet.main(
+        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json")]
+    )
+
+    assert "unmeasured rather than zero" in capsys.readouterr().out
+
+
+def _repo_file(tmp_path: Path) -> Path:
+    target = tmp_path / "repos.txt"
+    target.write_text("a/b\n", encoding="utf-8")
+    return target

@@ -69,8 +69,33 @@ log = logging.getLogger("nightshift.forkpool")
 #: So the star count is bounded at both ends rather than only below, and size is
 #: capped. `pushed` is a proxy for the suite having been run recently enough to
 #: be green.
+#:
+#: Retuned a second time, after probing the six repositories the previous query
+#: produced. Not one reached the measurement. The list it returned was almost
+#: entirely machine learning, because sorting `language:python` by stars returns
+#: the ecosystem where the stars are, and those repositories are the worst
+#: possible fit: multi-gigabyte installs, suites that download model weights,
+#: some that will not import without a GPU.
+#:
+#: Excluding the topics is cheap and does most of the work. It is a blunt
+#: instrument — a web application tagged `machine-learning` is lost with them —
+#: and that is an acceptable trade when the pool only needs a few dozen members
+#: out of the several hundred thousand repositories that match the rest.
 DEFAULT_QUERY = (
-    "language:python stars:100..3000 size:<50000 pushed:>2025-06-01 archived:false"
+    "language:python stars:100..3000 size:<50000 pushed:>2025-06-01 archived:false "
+    "-topic:machine-learning -topic:deep-learning -topic:pytorch -topic:tensorflow "
+    "-topic:llm -topic:awesome -topic:tutorial"
+)
+
+#: An alternative worth running alongside the default rather than instead of it.
+#:
+#: The default excludes what we do not want; this one asks for what we do. A
+#: repository that depends on a web framework is an application almost by
+#: definition — it pins, it has a suite that runs on CPU in seconds, and its
+#: dependencies are exactly the ones advisories are published against.
+APPLICATION_QUERY = (
+    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false "
+    "topic:flask OR topic:django OR topic:fastapi"
 )
 
 #: Path shapes that mean a machine can find the suite.
@@ -281,6 +306,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     proposer = sub.add_parser("propose", help="search and assess; writes a file, forks nothing")
     proposer.add_argument("--query", default=DEFAULT_QUERY)
+    proposer.add_argument(
+        "--applications",
+        action="store_const",
+        const=APPLICATION_QUERY,
+        dest="query",
+        help="ask for web applications by topic instead of excluding what we do not want",
+    )
     proposer.add_argument("--search", type=int, default=200, help="how many to assess")
     proposer.add_argument("--limit", type=int, default=50, help="how many to propose")
     proposer.add_argument("--out", default="fleet/candidates.json")

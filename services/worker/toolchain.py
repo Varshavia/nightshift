@@ -324,6 +324,15 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     python = venv_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     sandbox = Sandbox(repo_path=repo_path, python=python)
 
+    # Why the last attempt failed, not merely that it did. The install log used
+    # to record "base:-e . -> failed" and throw the output away, so every
+    # unbuildable repository looked identical. They are not: one wanted Python
+    # 3.12 and we offered 3.11, another wanted a MySQL client library that was
+    # not in the image. The first is a repository we could build by choosing a
+    # different interpreter, the second is a line in a Dockerfile — and neither
+    # is "this project is broken", which is what the bare verdict implied.
+    last_failure: list[str] = []
+
     def pip(arguments: Sequence[str], label: str) -> bool:
         result = sandbox.run(
             [python, "-m", "pip", "install", "-q", *arguments], timeout=INSTALL_TIMEOUT
@@ -331,6 +340,8 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
         combined = (result.stdout or "") + (result.stderr or "")
         ok = result.returncode == 0 and _MISSING_EXTRA not in combined
         sandbox.install_log.append(f"{label} -> {'ok' if ok else 'failed'}")
+        if not ok:
+            last_failure[:] = [_tail(combined, 1200)]
         return ok
 
     pip(["-U", "pip", "setuptools", "wheel"], "bootstrap")
@@ -341,7 +352,9 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
         raise EnvironmentBuildError("no recognised manifest and no packaging metadata")
     if not any(pip(arguments, f"base:{' '.join(arguments)}") for arguments in base):
         raise EnvironmentBuildError(
-            "the project would not install:\n" + "\n".join(sandbox.install_log)
+            "the project would not install:\n"
+            + "\n".join(sandbox.install_log)
+            + ("\nlast error:\n" + last_failure[0] if last_failure else "")
         )
 
     # pytest may not be declared anywhere even when the suite is written for it.

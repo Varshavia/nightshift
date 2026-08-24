@@ -180,7 +180,10 @@ def probe_one(
         repo_path = clone(repo, workspace, token=token)
         sandbox = build_environment(repo_path)
     except EnvironmentBuildError as exc:
-        return ProbeResult(repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=str(exc)[:500])
+        # Generous, because this is the field that has to answer "why". 500
+        # characters truncated exactly the part that mattered: the install log
+        # came first and the actual error came last.
+        return ProbeResult(repo=repo, verdict=ProbeVerdict.UNBUILDABLE, notes=str(exc)[:2500])
 
     baseline = run_tests(sandbox)
     if baseline.internal_error:
@@ -355,6 +358,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "break_rate": summary.break_rate,
                 },
                 "cases": benchmark_cases(results),
+                # Every repository, not only the breaking ones. The first real
+                # run produced zero cases and a 439-byte file: six verdicts, and
+                # not one word about why any of them happened, even though every
+                # result carried a `notes` explaining itself. A run that finds
+                # nothing is exactly the run whose reasons matter most — it is
+                # the one that has to be diagnosed rather than reported.
+                "results": [result.to_dict() for result in results],
             },
             indent=2,
         ),
@@ -370,7 +380,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"\n{summary.breaking} of {summary.upgrades_attempted} applied security upgrades "
             f"broke the calling code ({summary.break_rate:.0%})"
         )
-    print(f"benchmark cases written to {out}")
+    else:
+        # Not the same as "upgrades never break anything", and the difference is
+        # the whole point of the statistic.
+        print(
+            "\nno upgrade was applied to a green baseline, so the break rate is "
+            "unmeasured rather than zero. The reasons are in the file."
+        )
+    print(f"written to {out}")
     return 0
 
 

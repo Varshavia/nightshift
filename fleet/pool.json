@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-24T14:50:04.764014+00:00",
+  "count": 6,
+  "entries": [
+    {
+      "repo": "Varshavia/throttled",
+      "upstream": "erpalma/throttled",
+      "license_id": "MIT",
+      "stars": 2970,
+      "pinned_dependencies": 4,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 517,
+      "added_at": "2026-08-24T14:50:06.519988+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/OpenSwarm",
+      "upstream": "VRSEN/OpenSwarm",
+      "license_id": "MIT",
+      "stars": 2853,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 2792,
+      "added_at": "2026-08-24T14:50:07.788902+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/AIF360",
+      "upstream": "Trusted-AI/AIF360",
+      "license_id": "Apache-2.0",
+      "stars": 2853,
+      "pinned_dependencies": 8,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 7091,
+      "added_at": "2026-08-24T14:50:08.862509+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/leptonai",
+      "upstream": "leptonai/leptonai",
+      "license_id": "Apache-2.0",
+      "stars": 2824,
+      "pinned_dependencies": 4,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 7679,
+      "added_at": "2026-08-24T14:50:09.921999+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/flow2api",
+      "upstream": "TheSmallHanCat/flow2api",
+      "license_id": "MIT",
+      "stars": 2812,
+      "pinned_dependencies": 10,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 2143,
+      "added_at": "2026-08-24T14:50:11.229733+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/PowerDNS-Admin",
+      "upstream": "PowerDNS-Admin/PowerDNS-Admin",
+      "license_id": "MIT",
+      "stars": 2797,
+      "pinned_dependencies": 43,
+      "manifests": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 36608,
+      "added_at": "2026-08-24T14:50:12.268106+00:00",
+      "notes": ""
+    }
+  ]
+}

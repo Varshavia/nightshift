@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-24T15:07:50Z",
+  "summary": {
+    "probed": 6,
+    "counts": {
+      "UNBUILDABLE": 2,
+      "PROBE_ERROR": 1,
+      "NO_TESTS": 0,
+      "BASELINE_RED": 2,
+      "NO_FIX_AVAILABLE": 0,
+      "NOT_AFFECTED": 0,
+      "UPGRADE_FAILED": 1,
+      "CLEAN": 0,
+      "BREAKING": 0
+    },
+    "upgrades_attempted": 0,
+    "breaking": 0,
+    "break_rate": null
+  },
+  "cases": []
+}
