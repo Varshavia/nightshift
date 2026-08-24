@@ -224,8 +224,11 @@ def test_a_pre_existing_failure_does_not_disqualify_a_repository() -> None:
         exit_code=1,
     )
 
-    assert baseline.tests_collected == 0  # counts come from run_tests, not the constructor
-    assert failing_ids(baseline.output) == {"tests/test_asymmetric_crypto.py::test_asymmetric_cropto"}
+    # Counts are filled in by run_tests, not by the constructor.
+    assert baseline.tests_collected == 0
+    assert failing_ids(baseline.output) == {
+        "tests/test_asymmetric_crypto.py::test_asymmetric_cropto"
+    }
 
 
 def test_the_break_is_what_changed_not_what_was_red() -> None:

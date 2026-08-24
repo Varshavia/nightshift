@@ -68,6 +68,7 @@ from services.worker.toolchain import (
     clone,
     read_dependencies,
     run_tests,
+    upgrade_drift,
 )
 
 from nightshift_core.config import load_env_file
@@ -278,6 +279,25 @@ def probe_one(
             advisories=tuple(v.osv_id for v in fixable),
             baseline_seconds=baseline.duration_seconds,
             notes=str(exc)[:500],
+        )
+
+    # Did the upgrade actually happen? Asked of the environment, not of the
+    # manifest we just wrote. `apply_upgrade` rewrites pins and installs, and
+    # both halves can appear to succeed while the environment ends up somewhere
+    # else — a constraint elsewhere holding the old version down, a resolver
+    # backtracking, an install list that came out empty. A suite that stays
+    # green after an upgrade that did not happen is the most flattering result
+    # this probe can produce and the most worthless, and eight of eight came
+    # back CLEAN before this check was wired in.
+    drift = upgrade_drift(sandbox, fixable)
+    if drift:
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.UPGRADE_FAILED,
+            upgrades=upgrades,
+            advisories=tuple(v.osv_id for v in fixable),
+            baseline_seconds=baseline.duration_seconds,
+            notes="the upgrade did not take: " + "; ".join(str(d) for d in drift),
         )
 
     verified = run_tests(sandbox)
