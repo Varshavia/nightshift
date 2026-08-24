@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generated_at": "2026-08-24T14:50:04.764014+00:00",
-  "count": 6,
+  "count": 11,
   "entries": [
     {
       "repo": "Varshavia/throttled",
@@ -88,6 +88,78 @@
       "has_tests": true,
       "size_kb": 36608,
       "added_at": "2026-08-24T14:50:12.268106+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/f2",
+      "upstream": "Johnserf-Seed/f2",
+      "license_id": "Apache-2.0",
+      "stars": 2617,
+      "pinned_dependencies": 19,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 6918,
+      "added_at": "2026-08-24T16:13:56.532589+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/alerta",
+      "upstream": "alerta/alerta",
+      "license_id": "Apache-2.0",
+      "stars": 2527,
+      "pinned_dependencies": 23,
+      "manifests": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 11512,
+      "added_at": "2026-08-24T16:13:57.787242+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/splinter",
+      "upstream": "cobrateam/splinter",
+      "license_id": "BSD-3-Clause",
+      "stars": 2753,
+      "pinned_dependencies": 5,
+      "manifests": [
+        "requirements/test.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 4543,
+      "added_at": "2026-08-24T16:13:58.807513+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/fastapi-best-architecture",
+      "upstream": "fastapi-practices/fastapi-best-architecture",
+      "license_id": "MIT",
+      "stars": 2518,
+      "pinned_dependencies": 143,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 22731,
+      "added_at": "2026-08-24T16:13:59.803736+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/django-webpack-loader",
+      "upstream": "django-webpack/django-webpack-loader",
+      "license_id": "MIT",
+      "stars": 2540,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements-dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 9449,
+      "added_at": "2026-08-24T16:14:00.812443+00:00",
       "notes": ""
     }
   ]

@@ -115,6 +115,32 @@ class TestReport:
         """
         return self.exit_code in {3, 4}
 
+    @property
+    def collection_failed(self) -> bool:
+        """The suite could not be assembled, as opposed to run and failed.
+
+        The same exit code means opposite things either side of an upgrade, and
+        this property exists so the caller can tell them apart *by phase* rather
+        than by guessing.
+
+        Before we change anything, a collection error means the environment is
+        incomplete — a Django project with no ``DJANGO_SETTINGS_MODULE``, a suite
+        whose fixtures want a database that is not running, a project driven by
+        tox rather than by bare pytest. Seven of eleven repositories in the first
+        real pool landed here, and calling that ``BASELINE_RED`` claimed those
+        repositories arrived broken. They did not; we could not run them. The
+        difference matters because ``BASELINE_RED`` is subtracted from the
+        denominator of the number this project is judged on, and a denominator
+        padded with our own failures flatters us.
+
+        After an upgrade the identical output means the new version removed a
+        name and the import died — the break we exist to repair. So this is never
+        consulted there.
+        """
+        return self.exit_code == 2 and (
+            "error" in self.output.lower() and "collect" in self.output.lower()
+        )
+
 
 @dataclass(slots=True)
 class Sandbox:
@@ -123,6 +149,12 @@ class Sandbox:
     repo_path: Path
     python: Path
     install_log: list[str] = field(default_factory=list)
+    #: Extra environment the suite needs to run at all — in practice
+    #: ``DJANGO_SETTINGS_MODULE``. Discovered rather than configured, and kept
+    #: here so that every later command sees the same environment the successful
+    #: collection saw. Never a place for credentials: the policy engine forbids
+    #: the agent reading it, and nothing in it survives the job.
+    env: dict[str, str] = field(default_factory=dict)
 
     def run(
         self, argv: Sequence[str | Path], *, timeout: int
@@ -138,6 +170,7 @@ class Sandbox:
             PAGER="cat",
             EDITOR="true",
         )
+        env.update(self.env)
         # Fixed argv, never a shell string: nothing here is interpolated by a shell.
         return subprocess.run(
             [str(part) for part in argv],
@@ -280,6 +313,46 @@ def _test_dependency_plan(repo_path: Path) -> list[tuple[str, list[str]]]:
     return plan
 
 
+#: How deep to look for a settings module. Django projects keep them near the
+#: root or one package down; going further finds vendored copies and example
+#: applications, which are the wrong answer and slow to rule out.
+_SETTINGS_SEARCH_DEPTH = 4
+
+
+def _looks_like_django(sandbox: Sandbox) -> bool:
+    """Whether Django is installed in the sandbox at all.
+
+    Asked of the environment rather than the manifest, because the manifest that
+    names Django is often the dev-requirements file we already installed, and a
+    project can depend on it transitively without ever naming it.
+    """
+    return sandbox.run([sandbox.python, "-c", "import django"], timeout=60).returncode == 0
+
+
+def _django_settings_candidates(repo_path: Path) -> list[str]:
+    """Dotted paths to plausible settings modules, most likely first.
+
+    Test-specific settings are preferred over a project's real ones: they are
+    written to run without a database server, which is the difference between a
+    suite that starts and one that hangs waiting for postgres.
+    """
+    found: list[tuple[int, str]] = []
+    for path in repo_path.rglob("*settings*.py"):
+        relative = path.relative_to(repo_path)
+        if len(relative.parts) > _SETTINGS_SEARCH_DEPTH:
+            continue
+        skip = {".venv", "venv", "node_modules", "build", "dist"}
+        if any(part in skip for part in relative.parts):
+            continue
+        dotted = ".".join(relative.with_suffix("").parts)
+        name = relative.name.lower()
+        rank = 0 if "test" in name or "test" in str(relative.parent).lower() else 1
+        found.append((rank, dotted))
+    # Bounded: trying every settings module in a large repository would cost more
+    # than the suite it is trying to start.
+    return [dotted for _, dotted in sorted(found)][:6]
+
+
 def _collects(sandbox: Sandbox) -> bool:
     """Can pytest import the suite at all?
 
@@ -370,6 +443,24 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
         pip(arguments, label)
         if _collects(sandbox):
             return sandbox
+
+    # -- phase three: the settings module Django suites cannot start without -- #
+    #
+    # Narrow on purpose. Django is a large enough slice of the applications this
+    # fleet targets to be worth its own strategy, and its failure is uniform: the
+    # suite imports fine and dies on `DJANGO_SETTINGS_MODULE`, which is set by
+    # tox or manage.py in every one of these projects and by nothing at all when
+    # pytest is invoked bare. Every other framework gets no special case, because
+    # a builder that accumulates one per framework becomes a worse version of
+    # tox that nobody maintains.
+    if _looks_like_django(sandbox):
+        pip(["pytest-django"], "runner:pytest-django")
+        for dotted in _django_settings_candidates(repo_path):
+            sandbox.env["DJANGO_SETTINGS_MODULE"] = dotted
+            sandbox.install_log.append(f"django:DJANGO_SETTINGS_MODULE={dotted}")
+            if _collects(sandbox):
+                return sandbox
+        sandbox.env.pop("DJANGO_SETTINGS_MODULE", None)
 
     # Collection still fails. Not an error: the suite may be genuinely broken,
     # which is a real finding. The caller sees the exit code and the install log

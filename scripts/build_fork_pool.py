@@ -95,9 +95,15 @@ DEFAULT_QUERY = (
 #: repository that depends on a web framework is an application almost by
 #: definition — it pins, it has a suite that runs on CPU in seconds, and its
 #: dependencies are exactly the ones advisories are published against.
-APPLICATION_QUERY = (
-    "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false "
-    "topic:flask OR topic:django OR topic:fastapi"
+#: Three searches rather than one, because GitHub cannot express this as one.
+#: ``OR`` applies to free text only; between qualifiers it is a validation error
+#: — "The search contains only logical operators without any search terms" —
+#: and the qualifiers in a single query are always ANDed, so `topic:flask
+#: topic:django` asks for repositories that are somehow both. The union has to
+#: be assembled on our side.
+_APPLICATION_BASE = "language:python stars:50..3000 size:<30000 pushed:>2025-06-01 archived:false"
+APPLICATION_QUERIES: tuple[str, ...] = tuple(
+    f"{_APPLICATION_BASE} topic:{topic}" for topic in ("flask", "django", "fastapi")
 )
 
 #: Path shapes that mean a machine can find the suite.
@@ -172,9 +178,23 @@ def assess(
 
 def run_propose(args: argparse.Namespace, token: str) -> int:
     osv = None if args.no_advisories else OSVClient()
+    queries: list[str] = args.query if isinstance(args.query, list) else [args.query]
     with GitHubClient(token) as client:
-        log.info("searching: %s", args.query)
-        found = client.search_repositories(args.query, limit=args.search)
+        # Several searches merged into one survey. Deduplicated across queries as
+        # well as within them: a Django project tagged `fastapi` too would
+        # otherwise be assessed twice, forked twice, and counted twice in every
+        # number computed over the pool.
+        found: list[RepoMetadata] = []
+        seen: set[str] = set()
+        for query in queries:
+            log.info("searching: %s", query)
+            for meta in client.search_repositories(query, limit=args.search):
+                if meta.full_name not in seen:
+                    seen.add(meta.full_name)
+                    found.append(meta)
+            if len(found) >= args.search:
+                break
+        found = found[: args.search]
         log.info("assessing %d repositories", len(found))
         candidates: list[Candidate] = []
         truncated = False
@@ -209,7 +229,7 @@ def run_propose(args: argparse.Namespace, token: str) -> int:
     out.write_text(
         json.dumps(
             {
-                "query": args.query,
+                "query": queries,
                 "assessed": len(candidates),
                 "requested": len(found),
                 # A run cut short by a rate limit surveyed part of the world.
@@ -344,9 +364,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     proposer.add_argument(
         "--applications",
         action="store_const",
-        const=APPLICATION_QUERY,
+        const=list(APPLICATION_QUERIES),
         dest="query",
-        help="ask for web applications by topic instead of excluding what we do not want",
+        help="three searches — flask, django, fastapi — merged; asks for what we want "
+        "rather than excluding what we do not",
     )
     proposer.add_argument("--search", type=int, default=200, help="how many to assess")
     proposer.add_argument("--limit", type=int, default=50, help="how many to propose")

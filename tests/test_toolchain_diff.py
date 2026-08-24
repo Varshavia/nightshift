@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from services.worker.toolchain import Sandbox, capture_diff, diff_stats
+from services.worker.toolchain import Sandbox, TestReport, capture_diff, diff_stats
 
 
 @pytest.fixture
@@ -68,3 +68,58 @@ def test_diff_stats_counts_files_and_lines() -> None:
 def test_diff_stats_of_an_empty_diff_is_all_zero() -> None:
     stats = diff_stats("")
     assert (stats.files, stats.added, stats.removed) == (0, 0, 0)
+
+
+def test_a_collection_failure_is_not_the_suite_having_failed() -> None:
+    """The same exit code means opposite things either side of an upgrade.
+
+    Before we change anything, pytest exit 2 with collection errors means our
+    environment is incomplete — a Django project with no settings module, a
+    suite whose fixtures want a database. Seven of eleven repositories in the
+    first real pool landed here and were recorded BASELINE_RED, which claims
+    they arrived broken. They did not; we could not run them.
+    """
+    report = TestReport(
+        passed=False,
+        output=(
+            "ERROR collecting tests/app/test_webpack.py\n"
+            "django.core.exceptions.ImproperlyConfigured: Requested setting DEBUG\n"
+            "!!!! Interrupted: 3 errors during collection !!!!"
+        ),
+        duration_seconds=0.5,
+        exit_code=2,
+    )
+
+    assert report.collection_failed
+    assert not report.internal_error
+
+
+def test_a_real_test_failure_is_not_mistaken_for_a_collection_failure() -> None:
+    report = TestReport(
+        passed=False,
+        output="FAILED tests/test_auth.py::test_token - AssertionError\n1 failed, 40 passed",
+        duration_seconds=3.0,
+        exit_code=1,
+    )
+
+    assert not report.collection_failed
+
+
+def test_an_upgrade_that_kills_an_import_is_still_a_break() -> None:
+    """Exit 2 after the upgrade is the product, not our problem.
+
+    The new version removed a name and the import dies before any test runs —
+    the single most common shape of a real break. `collection_failed` is only
+    ever consulted at baseline, and this test is what stops someone deciding to
+    consult it later as well.
+    """
+    report = TestReport(
+        passed=False,
+        output="ERROR collecting tests/test_api.py\nImportError: cannot import name 'JWTError'",
+        duration_seconds=0.4,
+        exit_code=2,
+    )
+
+    # It reports true — the guard is the caller's phase, not the property.
+    assert report.collection_failed
+    assert not report.internal_error, "must never be blamed on pytest itself"

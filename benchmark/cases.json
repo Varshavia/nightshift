@@ -1,22 +1,22 @@
 {
   "schema": 1,
-  "generated_at": "2026-08-24T15:38:02Z",
+  "generated_at": "2026-08-24T16:28:56Z",
   "summary": {
-    "probed": 6,
+    "probed": 11,
     "counts": {
-      "UNBUILDABLE": 1,
+      "UNBUILDABLE": 0,
       "PROBE_ERROR": 1,
       "NO_TESTS": 0,
-      "BASELINE_RED": 1,
+      "BASELINE_RED": 7,
       "NO_FIX_AVAILABLE": 0,
       "NOT_AFFECTED": 2,
-      "UPGRADE_FAILED": 1,
-      "CLEAN": 0,
+      "UPGRADE_FAILED": 0,
+      "CLEAN": 1,
       "BREAKING": 0
     },
-    "upgrades_attempted": 0,
+    "upgrades_attempted": 1,
     "breaking": 0,
-    "break_rate": null
+    "break_rate": 0.0
   },
   "cases": [],
   "results": [
@@ -25,7 +25,7 @@
       "verdict": "NOT_AFFECTED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 2.456307891999984,
+      "baseline_seconds": 2.5758956700001363,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": ""
@@ -35,7 +35,7 @@
       "verdict": "NOT_AFFECTED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.218688530999998,
+      "baseline_seconds": 1.0635198330001003,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": ""
@@ -45,50 +45,94 @@
       "verdict": "PROBE_ERROR",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 3.2908238049999454,
+      "baseline_seconds": 2.86726223200003,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 3; base:-e . -> ok; runner:pytest -> ok; collection still failing after every strategy"
     },
     {
       "repo": "Varshavia/leptonai",
-      "verdict": "UPGRADE_FAILED",
+      "verdict": "CLEAN",
       "upgrades": [
-        "black 23.12.0 -> 24.3.0",
-        "black 23.12.0 -> 24.3.0",
-        "black 23.12.0 -> 26.3.0",
         "black 23.12.0 -> 26.3.1"
       ],
       "advisories": [
-        "GHSA-fj7x-q9j7-g6q6",
-        "PYSEC-2024-48",
-        "PYSEC-2026-2120",
         "PYSEC-2026-2121"
       ],
-      "baseline_seconds": 6.7070346269999845,
-      "verify_seconds": 0.0,
+      "baseline_seconds": 6.330448268000055,
+      "verify_seconds": 6.3439660720000575,
       "failing_output": "",
-      "notes": "the fixed versions would not install:\nERROR: Cannot install black==24.3.0 and black==26.3.0 because these package versions have conflicting dependencies.\nERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts\n"
+      "notes": ""
     },
     {
       "repo": "Varshavia/flow2api",
       "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 1.6855604200000016,
+      "baseline_seconds": 1.387037884000165,
       "verify_seconds": 0.0,
       "failing_output": "",
       "notes": "pytest exit 2"
     },
     {
       "repo": "Varshavia/PowerDNS-Admin",
-      "verdict": "UNBUILDABLE",
+      "verdict": "BASELINE_RED",
       "upgrades": [],
       "advisories": [],
-      "baseline_seconds": 0.0,
+      "baseline_seconds": 71.78796328800036,
       "verify_seconds": 0.0,
       "failing_output": "",
-      "notes": "the project would not install:\nbootstrap -> ok\nbase:-r requirements.txt -> failed\nbase:-r requirements-dev.txt -> failed\nlast error:\n... [truncated] ...\nightshift-probe-xt1ppfmy/Varshavia_PowerDNS-Admin/.venv/include -I/usr/local/include/python3.12 -c Modules/LDAPObject.c -o build/temp.linux-x86_64-cpython-312/Modules/LDAPObject.o\n      In file included from Modules/LDAPObject.c:3:\n      Modules/common.h:15:10: fatal error: lber.h: No such file or directory\n         15 | #include <lber.h>\n            |          ^~~~~~~~\n      compilation terminated.\n      error: Command '['gcc', '-fno-strict-overflow', '-Wsign-compare', '-DNDEBUG', '-g', '-O3', '-Wall', '-fPIC', '-DHAVE_SASL', '-DHAVE_TLS', '-DLDAPMODULE_VERSION=3.4.7', '-DLDAPMODULE_AUTHOR=python-ldap project', '-DLDAPMODULE_LICENSE=Python style', '-IModules', '-I/tmp/nightshift-probe-xt1ppfmy/Varshavia_PowerDNS-Admin/.venv/include', '-I/usr/local/include/python3.12', '-c', 'Modules/LDAPObject.c', '-o', 'build/temp.linux-x86_64-cpython-312/Modules/LDAPObject.o']' returned non-zero exit status 1.\n      [end of output]\n  \n  note: This error originates from a subprocess, and is likely not a problem with pip.\n  ERROR: Failed building wheel for python-ldap\nerror: failed-wheel-build-for-install\n\n\u00d7 Failed to build installable wheels for some pyproject.toml based projects\n\u2570\u2500> python-ldap\n"
+      "notes": "pytest exit 1"
+    },
+    {
+      "repo": "Varshavia/f2",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 5.931024650999916,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/alerta",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.2496206989999337,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/splinter",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.029202135000105,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/fastapi-best-architecture",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 2.7437981129996842,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
+    },
+    {
+      "repo": "Varshavia/django-webpack-loader",
+      "verdict": "BASELINE_RED",
+      "upgrades": [],
+      "advisories": [],
+      "baseline_seconds": 1.0131700750002892,
+      "verify_seconds": 0.0,
+      "failing_output": "",
+      "notes": "pytest exit 2"
     }
   ]
 }

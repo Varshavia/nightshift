@@ -279,3 +279,28 @@ def test_the_advisory_check_comes_after_the_cheap_refusals() -> None:
         application(license_id="CC-BY-4.0", advisories_checked=True, actionable_advisories=0)
     )
     assert "licence" in reason
+
+
+def test_no_search_query_uses_a_logical_operator_between_qualifiers() -> None:
+    """GitHub rejects it, and the rejection arrives as a 422 mid-run.
+
+    `topic:flask OR topic:django` looks reasonable and is not: OR applies to
+    free text only, and between qualifiers GitHub answers "The search contains
+    only logical operators without any search terms". Qualifiers in one query
+    are always ANDed, so the union has to be several searches merged on our
+    side. This test is what stops the tidier-looking version coming back.
+    """
+    from scripts.build_fork_pool import APPLICATION_QUERIES, DEFAULT_QUERY
+
+    for query in (DEFAULT_QUERY, *APPLICATION_QUERIES):
+        assert " OR " not in query, query
+        assert " NOT " not in query, query
+
+
+def test_the_application_queries_ask_for_one_framework_each() -> None:
+    from scripts.build_fork_pool import APPLICATION_QUERIES
+
+    topics = [q.rsplit("topic:", 1)[1] for q in APPLICATION_QUERIES]
+    assert sorted(topics) == ["django", "fastapi", "flask"]
+    for query in APPLICATION_QUERIES:
+        assert query.count("topic:") == 1, "two topics in one query means neither matches"
