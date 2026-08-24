@@ -38,7 +38,13 @@ from nightshift_core.fleet import (
     propose,
     save_pool,
 )
-from nightshift_core.github import GitHubClient, GitHubError, RateLimited, RepoMetadata
+from nightshift_core.github import (
+    GitHubClient,
+    GitHubError,
+    RateLimited,
+    RepoMetadata,
+    WrongTokenType,
+)
 from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
 
 log = logging.getLogger("nightshift.forkpool")
@@ -229,6 +235,12 @@ def run_fork(args: argparse.Namespace, token: str) -> int:
                 continue
             try:
                 forked = client.fork(upstream, organization=args.org)
+            except WrongTokenType as exc:
+                # Stop rather than carry on. This is a property of the token, so
+                # every remaining repository produces the identical refusal, and
+                # six copies of it bury the one sentence that says what to do.
+                print(f"\n{exc}", file=sys.stderr)
+                break
             except GitHubError as exc:
                 log.warning("could not fork %s: %s", upstream, exc)
                 continue
