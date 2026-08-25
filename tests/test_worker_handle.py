@@ -7,6 +7,7 @@ they are exercised.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -191,3 +192,79 @@ def test_every_phase_is_checkpointed(patched: pytest.MonkeyPatch) -> None:
     job = run(store)
     assert store.get(job.job_id) is not None
     assert store.get(job.job_id).outcome is Outcome.PATCHED_CLEAN  # type: ignore[union-attr]
+
+
+class _Message:
+    """The two methods the consumer is allowed to call on a Pub/Sub message."""
+
+    def __init__(self, job: RepoJob | None = None, raw: bytes | None = None) -> None:
+        self.data = raw if raw is not None else json.dumps(job.to_dict()).encode()  # type: ignore[union-attr]
+        self.acked = False
+        self.nacked = False
+
+    def ack(self) -> None:
+        self.acked = True
+
+    def nack(self) -> None:
+        self.nacked = True
+
+
+def _drain(
+    monkeypatch: pytest.MonkeyPatch, message: _Message, finished: RepoJob | None
+) -> None:
+    """Run the queueing decision against one message.
+
+    `on_message` is a module-level function precisely so this needs no live
+    subscription: whether a message comes back is the only decision here worth
+    getting wrong, and a test that could only reach it through a Pub/Sub client
+    would not be run.
+    """
+    def fake_handle(job: RepoJob, store: object, settings: object) -> RepoJob:
+        assert finished is not None
+        return finished
+
+    monkeypatch.setattr(worker, "handle", fake_handle)
+    worker.on_message(message, MemoryJobStore(), Settings(gcp_project="p", fork_org="org"))
+
+
+
+def test_a_terminal_outcome_is_acknowledged_even_when_it_is_a_bad_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UNBUILDABLE is an answer. Redelivering it buys another fifteen minutes
+    of the same, and the message would circulate until the retention window
+    ended — which is a queue slowly filling with repositories we already know
+    we cannot help."""
+    message = _Message(RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[]))
+    finished = RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[])
+    finished.finish(Outcome.UNBUILDABLE)
+
+    _drain(monkeypatch, message, finished)
+
+    assert message.acked and not message.nacked
+
+
+def test_our_own_failure_goes_back_on_the_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """INFRA_ERROR is the one member of Outcome that is about us.
+
+    Acknowledging it would throw away a repository for a reason that had nothing
+    to do with the repository.
+    """
+    message = _Message(RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[]))
+    finished = RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[])
+    finished.finish(Outcome.INFRA_ERROR)
+
+    _drain(monkeypatch, message, finished)
+
+    assert message.nacked and not message.acked
+
+
+def test_an_unreadable_message_is_not_redelivered_forever(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It cannot be delivered to anyone, so returning it only moves the problem."""
+    message = _Message(None, raw=b"{not json")
+
+    _drain(monkeypatch, message, None)
+
+    assert message.acked

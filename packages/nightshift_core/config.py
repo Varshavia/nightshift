@@ -116,6 +116,11 @@ class Settings:
     gcp_project: str = ""
     gcp_region: str = "us-central1"
     jobs_topic: str = "nightshift-jobs"
+    #: The workers pull from this. Named separately from the topic because a
+    #: topic with no subscription silently discards everything published to
+    #: it — the scanner's first real run fanned out twenty-one jobs into a
+    #: void, and nothing anywhere reported a problem.
+    jobs_subscription: str = "nightshift-jobs-workers"
     firestore_database: str = "(default)"
     #: Where clones are built. ``/workspace`` in the container; a temp directory
     #: locally, because a laptop has no ``/workspace`` and should not need one.
@@ -149,6 +154,9 @@ class Settings:
             gcp_project=_env("NIGHTSHIFT_GCP_PROJECT"),
             gcp_region=_env("NIGHTSHIFT_GCP_REGION", "us-central1"),
             jobs_topic=_env("NIGHTSHIFT_JOBS_TOPIC", "nightshift-jobs"),
+            jobs_subscription=_env(
+                "NIGHTSHIFT_JOBS_SUBSCRIPTION", "nightshift-jobs-workers"
+            ),
             firestore_database=_env("NIGHTSHIFT_FIRESTORE_DATABASE", "(default)"),
             workspace_root=_env("NIGHTSHIFT_WORKSPACE_ROOT", "/workspace"),
             repair_model=_env("NIGHTSHIFT_REPAIR_MODEL", "gemini-3.5-flash"),

@@ -13,6 +13,7 @@ set -euo pipefail
 PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
 TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"
+SUBSCRIPTION="${NIGHTSHIFT_JOBS_SUBSCRIPTION:-nightshift-jobs-workers}"
 REPO="nightshift"
 TARGET="${1:-all}"
 
@@ -216,6 +217,24 @@ if ! gcloud pubsub topics describe "$TOPIC" --project "$PROJECT" >/dev/null 2>&1
   gcloud pubsub topics create "$TOPIC" --project "$PROJECT"
 fi
 
+# A topic with no subscription discards everything published to it, silently and
+# by design. The scanner's first real run fanned out twenty-one jobs into
+# nothing at all and reported success, because publishing had genuinely
+# succeeded — there was simply nobody on the other end.
+#
+# The acknowledgement deadline is the maximum Pub/Sub allows. A repair can take
+# far longer than ten minutes, which the streaming pull client handles by
+# extending the lease while its callback is still working; the deadline here is
+# the ceiling on how long a *dead* worker holds a repository hostage before
+# somebody else may retry it.
+if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION" --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating Pub/Sub subscription ${SUBSCRIPTION}"
+  gcloud pubsub subscriptions create "$SUBSCRIPTION" \
+    --topic "$TOPIC" --project "$PROJECT" \
+    --ack-deadline 600 \
+    --message-retention-duration 7d
+fi
+
 if ! gcloud artifacts repositories describe "$REPO" \
     --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
   say "creating Artifact Registry repository"
@@ -296,7 +315,7 @@ deploy_job() {
     --service-account "${sa}@${PROJECT}.iam.gserviceaccount.com" \
     --task-timeout "$timeout" \
     --max-retries 1 \
-    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
+    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
 }
