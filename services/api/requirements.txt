@@ -2,3 +2,15 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 google-cloud-firestore>=2.17
+
+# The domain package's own runtime dependencies. Repeated here because the
+# service images put `packages/` on PYTHONPATH rather than pip-installing it,
+# so nothing installs what `nightshift_core` declares in pyproject.toml.
+#
+# That gap is invisible until a deployment: adding one import to models.py —
+# `packaging`, for consolidating advisories — broke this image and nothing else,
+# and the symptom was a Cloud Run revision that never answered its health probe.
+# tests/test_packaging.py now asserts these lists stay in step.
+httpx>=0.27
+packaging>=24.0
+opentelemetry-api>=1.27
