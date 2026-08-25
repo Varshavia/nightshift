@@ -75,17 +75,40 @@ grant nightshift-worker roles/pubsub.subscriber
 grant nightshift-worker roles/datastore.user
 grant nightshift-worker roles/aiplatform.user
 
-# The API reads. Deliberately no datastore.owner — approvals write one field
-# through a narrow path, not a broad role.
-grant nightshift-api roles/datastore.viewer
+# The API reads, and writes exactly one thing: an approval. `datastore.viewer`
+# cannot write at all and `datastore.user` can write anything, so neither says
+# what this service actually does — a custom role does, and it is the difference
+# between least privilege as a comment and least privilege as configuration.
+if ! gcloud iam roles describe nightshiftApprover --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating custom role nightshiftApprover"
+  gcloud iam roles create nightshiftApprover --project "$PROJECT" \
+    --title "Nightshift control tower" \
+    --description "Read jobs; write approvals. Nothing else." \
+    --permissions "datastore.entities.get,datastore.entities.list,datastore.entities.create,datastore.entities.update,datastore.entities.delete" \
+    --stage GA --quiet
+fi
+grant nightshift-api "projects/${PROJECT}/roles/nightshiftApprover"
 
 # Everything that runs writes spans, because the cost curve is a query over them
 # and a service that cannot write a span drops out of the number silently.
 grant nightshift-scanner roles/cloudtrace.agent
 grant nightshift-worker  roles/cloudtrace.agent
 
-# Only the worker opens pull requests, so only the worker reads the token.
+# Two tokens, because the two services need opposite things from GitHub.
+#
+# The worker opens pull requests and needs a credential that can write. The
+# scanner only reads manifests — but it cannot do that anonymously either: the
+# unauthenticated quota is sixty requests an hour, a pool of three hundred
+# repositories needs several times that in a single scan, and a refused request
+# does not look refused. It comes back as a repository with no tests and no
+# pins, which is a wrong answer rather than an error.
+#
+# So the scanner gets a token with no scopes at all. That is not a smaller
+# version of the worker's credential; it is a different kind of thing — one
+# that can read public data and cannot write anywhere, by construction rather
+# than by policy.
 grant nightshift-worker roles/secretmanager.secretAccessor
+grant nightshift-scanner roles/secretmanager.secretAccessor
 
 # The scheduler calls the scanner job as this account, so it has to be allowed
 # to invoke it. Without this the nightly run fails with a 403 that looks like a
@@ -123,6 +146,33 @@ if ! gcloud secrets describe nightshift-github-token --project "$PROJECT" >/dev/
   printf %s "$GITHUB_TOKEN" | gcloud secrets create nightshift-github-token \
     --data-file=- --project "$PROJECT" --quiet
 fi
+
+if ! gcloud secrets describe nightshift-github-read-token --project "$PROJECT" >/dev/null 2>&1; then
+  if [[ -z "${GITHUB_READ_TOKEN:-}" ]]; then
+    say "GITHUB_READ_TOKEN is not set and the read-only secret does not exist yet"
+    echo "  The scanner reads manifests through the GitHub API. Anonymously that is" >&2
+    echo "  sixty requests an hour, which one scan of this pool exceeds several times" >&2
+    echo "  over — and a refused request comes back looking like a repository with no" >&2
+    echo "  tests rather than like an error." >&2
+    echo "" >&2
+    echo "  Create a classic token with NO scopes ticked — it can read public data and" >&2
+    echo "  write nothing — then:" >&2
+    echo "    export GITHUB_READ_TOKEN=ghp_..." >&2
+    exit 1
+  fi
+  say "creating secret nightshift-github-read-token"
+  printf %s "$GITHUB_READ_TOKEN" | gcloud secrets create nightshift-github-read-token \
+    --data-file=- --project "$PROJECT" --quiet
+fi
+
+# Guards the one write the control tower exposes. Generated rather than asked
+# for: a key a person invents during a deployment is a key a person reuses.
+if ! gcloud secrets describe nightshift-approval-key --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating secret nightshift-approval-key"
+  python -c "import secrets; print(secrets.token_urlsafe(32), end='')" \
+    | gcloud secrets create nightshift-approval-key --data-file=- --project "$PROJECT" --quiet
+fi
+grant nightshift-api roles/secretmanager.secretAccessor
 
 # --------------------------------------------------------------------------- #
 # Firestore, Pub/Sub, Artifact Registry
@@ -209,11 +259,11 @@ deploy_job() {
   # here. A deployment script has to declare the whole desired state; one that
   # only ever adds is not idempotent, whatever its comments claim.
   local secret_args
-  if [[ "$wants_token" == "token" ]]; then
-    secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-token:latest")
-  else
-    secret_args=(--clear-secrets)
-  fi
+  case "$wants_token" in
+    write) secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-token:latest") ;;
+    read)  secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-read-token:latest") ;;
+    *)     secret_args=(--clear-secrets) ;;
+  esac
   build_and_push "$service"
   say "deploying job ${service}"
   gcloud run jobs deploy "nightshift-${service}" \
@@ -228,17 +278,36 @@ deploy_job() {
 }
 
 case "$TARGET" in
-  scanner|all) deploy_job scanner nightshift-scanner 900s ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s token ;;&
+  scanner|all) deploy_job scanner nightshift-scanner 900s read ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write ;;&
   api|all)
     build_and_push api
     say "deploying api"
+    # `--allow-unauthenticated` is deliberate, and it is safe only because the
+    # code draws the line elsewhere. What this service discloses is what our own
+    # fleet did to our own forks: outcome counts, phases, and links to pull
+    # requests that are already public on GitHub. None of it is anyone else's to
+    # lose. The one thing that is not a read — approving a repository's pull
+    # request to go upstream, which puts our output in front of somebody else's
+    # project — is refused without NIGHTSHIFT_APPROVAL_KEY, and refused by
+    # default when no key is configured at all.
+    #
+    # Putting IAM on the whole service instead would mean anyone reviewing this
+    # project needs a Google identity and a token to read a dashboard of public
+    # information. That is not security; it is a locked door on an empty room.
+    #
+    # The comment lives here rather than among the flags because a `#` line
+    # between two `\`-continued lines silently ends the command: the previous
+    # version of this block deployed with neither the flag nor the environment
+    # it needed, reported success, and left `--allow-unauthenticated` to be run
+    # as a command of its own.
     gcloud run deploy nightshift-api \
       --image "${IMAGE_BASE}/api:latest" \
       --region "$REGION" --project "$PROJECT" \
       --service-account "nightshift-api@${PROJECT}.iam.gserviceaccount.com" \
-      --no-allow-unauthenticated \
+      --allow-unauthenticated \
       --set-env-vars "NIGHTSHIFT_GCP_PROJECT=${PROJECT}" \
+      --set-secrets "NIGHTSHIFT_APPROVAL_KEY=nightshift-approval-key:latest" \
       --quiet
     ;;
 esac

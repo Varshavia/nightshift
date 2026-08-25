@@ -135,6 +135,10 @@ class Settings:
     fleet_pool_path: str = "fleet/pool.json"
     #: Read from the environment, never logged, never persisted, never defaulted.
     github_token: str | None = None
+    #: Guards the one write the control tower exposes. Empty means the endpoint
+    #: refuses everything, which is the right default: a dashboard deployed
+    #: without one can be read by anyone and can send nothing upstream.
+    approval_key: str = ""
 
     allow_upstream_prs: bool = False
     ceilings: Ceilings = field(default_factory=Ceilings)
@@ -154,23 +158,37 @@ class Settings:
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),
             fleet_pool_path=_env("NIGHTSHIFT_FLEET_POOL", "fleet/pool.json"),
             github_token=_env("GITHUB_TOKEN") or None,
+            approval_key=_env("NIGHTSHIFT_APPROVAL_KEY"),
             allow_upstream_prs=_env_bool("ALLOW_UPSTREAM_PRS", False),
             ceilings=Ceilings.from_env(),
         )
 
+    def require_project(self) -> None:
+        """Enough to reach Firestore and Vertex, and nothing about forking.
+
+        Split out from :meth:`require_cloud` because the control tower needs a
+        project and has no opinion about where forks live — it never forks. The
+        combined check made a read-only dashboard fail with "missing
+        NIGHTSHIFT_FORK_ORG", which is true, unhelpful, and about a capability
+        the service does not have.
+        """
+        if not self.gcp_project:
+            raise RuntimeError("missing required environment variable: NIGHTSHIFT_GCP_PROJECT")
+
     def require_cloud(self) -> None:
-        """Fail loudly at startup rather than mysteriously at the first call."""
-        missing = [
-            name
-            for name, value in (
-                ("NIGHTSHIFT_GCP_PROJECT", self.gcp_project),
-                ("NIGHTSHIFT_FORK_ORG", self.fork_org),
-            )
-            if not value
-        ]
-        if missing:
+        """What a service that writes to GitHub needs. Fail loudly at startup
+        rather than mysteriously at the first call.
+
+        The fork organisation is in here rather than in
+        :meth:`require_project` because a worker that does not know where its
+        forks live would discover that only when it tried to open a pull
+        request, having already spent the tokens to earn one.
+        """
+        self.require_project()
+        if not self.fork_org:
             raise RuntimeError(
-                "missing required environment variables: " + ", ".join(sorted(missing))
+                "missing required environment variable: NIGHTSHIFT_FORK_ORG — "
+                "the fleet never operates outside it"
             )
 
 
