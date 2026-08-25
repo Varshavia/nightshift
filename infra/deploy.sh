@@ -92,6 +92,20 @@ grant nightshift-worker roles/secretmanager.secretAccessor
 # scheduler problem and is actually an IAM one.
 grant nightshift-scanner roles/run.invoker
 
+# Cloud Build runs as the project's default compute service account, and on
+# projects created since 2024 that account starts with no roles at all. The
+# failure is remote and unhelpful — "the service account running this build does
+# not have permission to write logs" — and it happens after the whole repository
+# has been uploaded, so it costs a full build cycle to discover.
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+BUILD_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+say "granting Cloud Build (${BUILD_SA}) what it needs"
+for role in roles/logging.logWriter roles/artifactregistry.writer roles/storage.objectUser; do
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member "serviceAccount:${BUILD_SA}" --role "$role" \
+    --condition=None --quiet >/dev/null
+done
+
 # --------------------------------------------------------------------------- #
 # Secrets
 # --------------------------------------------------------------------------- #
@@ -115,7 +129,12 @@ fi
 # --------------------------------------------------------------------------- #
 if ! gcloud firestore databases describe --database="(default)" --project "$PROJECT" >/dev/null 2>&1; then
   say "creating Firestore database"
-  gcloud firestore databases create --location="$REGION" --project "$PROJECT" --quiet
+  # `--type` is stated rather than left to the default. A database created in
+  # Datastore mode looks fine until the first write, which fails with an error
+  # about entity groups that says nothing about the real cause, and the mode
+  # cannot be changed afterwards — the database has to be deleted and remade.
+  gcloud firestore databases create \
+    --location="$REGION" --type=firestore-native --project "$PROJECT" --quiet
 fi
 
 if ! gcloud pubsub topics describe "$TOPIC" --project "$PROJECT" >/dev/null 2>&1; then
@@ -171,7 +190,30 @@ build_and_push() {
 }
 
 deploy_job() {
-  local service="$1" sa="$2" timeout="$3"
+  local service="$1" sa="$2" timeout="$3" wants_token="${4:-no}"
+
+  # The GitHub token is attached to the worker and to nothing else. The scanner
+  # reads advisories and publishes messages; it has no use for a credential that
+  # can write to a repository, and Cloud Run refuses to deploy a job whose
+  # service account cannot read a secret it was handed — which is how this was
+  # found, on the first real deployment.
+  #
+  # Granting the scanner `secretAccessor` would have made the error go away and
+  # been the wrong fix: least privilege is not a comment in a script, it is
+  # which service accounts can read which secrets.
+  # Stated either way, never left implicit. `gcloud run jobs deploy` updates an
+  # existing job in place and omitting `--set-secrets` does not remove a binding
+  # that is already there — it leaves it. So a script that merely stops asking
+  # for the secret does not take it away, and the second deployment fails with
+  # the identical permission error as the first, which is exactly what happened
+  # here. A deployment script has to declare the whole desired state; one that
+  # only ever adds is not idempotent, whatever its comments claim.
+  local secret_args
+  if [[ "$wants_token" == "token" ]]; then
+    secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-token:latest")
+  else
+    secret_args=(--clear-secrets)
+  fi
   build_and_push "$service"
   say "deploying job ${service}"
   gcloud run jobs deploy "nightshift-${service}" \
@@ -181,13 +223,13 @@ deploy_job() {
     --task-timeout "$timeout" \
     --max-retries 1 \
     --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
-    --set-secrets "GITHUB_TOKEN=nightshift-github-token:latest" \
+    ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
 }
 
 case "$TARGET" in
   scanner|all) deploy_job scanner nightshift-scanner 900s ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s token ;;&
   api|all)
     build_and_push api
     say "deploying api"

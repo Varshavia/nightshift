@@ -6,11 +6,11 @@ scan open and a crash costs one night's scan rather than one night's work.
 
 Shape of a run:
 
-    load fleet          which repositories are ours to touch          [stub]
-    read manifests      pinned dependencies, per repository            [stub]
+    load fleet          which repositories are ours to touch    [implemented]
+    read manifests      pinned dependencies, per repository      [implemented]
     query OSV           one batched request for the whole fleet  [implemented]
     triage              severity floor now; the Gemma pass in Block 3  [partial]
-    publish             one Pub/Sub message per affected repo          [stub]
+    publish             one Pub/Sub message per affected repo    [implemented]
 
 Everything marked ``[stub]`` raises ``NotImplementedError`` on purpose. A stub
 that returns an empty list would make a broken scan look like a quiet night,
@@ -19,10 +19,13 @@ which is the failure mode this project is least willing to have.
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any
 
 from nightshift_core.config import Settings, get_settings
 from nightshift_core.fleet import load_pool
@@ -117,14 +120,52 @@ def triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]:
     ]
 
 
-def publish(job: RepoJob, settings: Settings) -> str:
+@lru_cache(maxsize=1)
+def _publisher() -> Any:
+    """One publisher for the process, built on first use.
+
+    Imported inside the function rather than at module load so the scanner stays
+    importable on a machine with no cloud libraries — the same rule the job
+    store follows, and one that CI asserts on directly.
+
+    Cached because a scan fans out to every affected repository in the fleet,
+    and a client per message would open a connection per message.
+    """
+    from google.cloud import pubsub_v1
+
+    return pubsub_v1.PublisherClient()
+
+
+def publish(job: RepoJob, settings: Settings, *, timeout: float = 30.0) -> str:
     """Publish one job to Pub/Sub. Returns the message id.
 
     One message per repository, not per advisory: the worker builds the
     environment once and applies every upgrade that repository needs in a single
     pass, because the environment build is the expensive part.
+
+    **This blocks on the result.** Pub/Sub's publish is asynchronous and hands
+    back a future; a scan that fired three hundred of them and exited would
+    report three hundred jobs published having published an unknown number,
+    because the process can die with messages still sitting in the client's
+    buffer. Waiting costs milliseconds per repository and makes the count in the
+    log a fact rather than an intention — which matters here more than usual,
+    since a scan that publishes nothing and a quiet night look identical in the
+    morning.
+
+    The repository and job id ride along as attributes. The body carries them
+    too, but an attribute can be read by a subscription filter and shown in the
+    console without parsing JSON, which is the difference between debugging a
+    night's run and reading it.
     """
-    raise NotImplementedError("scanner: publish")
+    publisher = _publisher()
+    topic = publisher.topic_path(settings.gcp_project, settings.jobs_topic)
+    future = publisher.publish(
+        topic,
+        json.dumps(job.to_dict()).encode("utf-8"),
+        repo=job.repo,
+        job_id=job.job_id,
+    )
+    return str(future.result(timeout=timeout))
 
 
 def scan(settings: Settings | None = None) -> ScanResult:

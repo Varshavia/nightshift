@@ -20,6 +20,7 @@ from scripts.probe_fleet import (
     benchmark_cases,
     summarise,
 )
+from services.worker.toolchain import TestReport, collection_counts, failing_ids
 
 from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
 
@@ -206,3 +207,81 @@ def _repo_file(tmp_path: Path) -> Path:
     target = tmp_path / "repos.txt"
     target.write_text("a/b\n", encoding="utf-8")
     return target
+
+
+def test_a_pre_existing_failure_does_not_disqualify_a_repository() -> None:
+    """flask-jwt-extended: 106 passing, one failing on an absent crypto backend.
+
+    Demanding a perfectly green baseline sounds rigorous and is not — it throws
+    away a hundred usable tests over one failure that belongs to our container
+    rather than to the repository.
+    """
+    baseline = TestReport(
+        passed=False,
+        output="FAILED tests/test_asymmetric_crypto.py::test_asymmetric_cropto\n"
+        "1 failed, 106 passed, 3 errors in 0.76s",
+        duration_seconds=1.0,
+        exit_code=1,
+    )
+
+    # Counts are filled in by run_tests, not by the constructor.
+    assert baseline.tests_collected == 0
+    assert failing_ids(baseline.output) == {
+        "tests/test_asymmetric_crypto.py::test_asymmetric_cropto"
+    }
+
+
+def test_the_break_is_what_changed_not_what_was_red() -> None:
+    before = failing_ids("FAILED tests/test_crypto.py::test_rsa\n1 failed, 106 passed")
+    after = failing_ids(
+        "FAILED tests/test_crypto.py::test_rsa\n"
+        "FAILED tests/test_decode.py::test_decode_algorithms\n"
+        "2 failed, 105 passed"
+    )
+
+    assert after - before == {"tests/test_decode.py::test_decode_algorithms"}
+
+
+def test_an_import_that_dies_after_the_upgrade_counts_as_a_break() -> None:
+    """The most common shape of a real break: the name is gone, so the module
+    never imports and no test in it runs at all."""
+    before = failing_ids("110 passed in 2.0s")
+    after = failing_ids("ERROR tests/test_view_decorators.py\n1 error in 0.4s")
+
+    assert after - before == {"tests/test_view_decorators.py"}
+
+
+def test_a_suite_where_nothing_passes_is_still_baseline_red() -> None:
+    """The rule loosened, it did not disappear. A repository whose every test is
+    red offers no evidence either way and must not enter the denominator."""
+    output = "\n".join(f"FAILED tests/test_{n}.py::test_{n}" for n in range(4)) + "\n4 failed"
+    assert len(failing_ids(output)) == 4
+
+
+def test_an_upgrade_verified_by_no_tests_is_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`code-examples-python` was called CLEAN with zero tests at baseline.
+
+    Loosening the green-baseline rule to tolerate pre-existing failures was
+    right. Loosening it far enough that an empty suite counts as evidence was
+    the same false-green this project exists to refuse, arrived at from the
+    other direction.
+    """
+    from services.worker.toolchain import collection_counts
+
+    assert collection_counts("2 errors in 0.30s") == (0, 2)
+
+
+def test_a_suite_that_is_mostly_red_is_our_environment_not_their_code() -> None:
+    """alerta: 174 of 194 tests failing before we touched anything.
+
+    A maintained project does not ship a suite that is ninety percent red. When
+    it looks that way from inside our container, the container is what is wrong
+    — alerta's fixtures want a database — and calling the result CLEAN would put
+    a number in the denominator that twenty passing tests were holding up.
+    """
+    collected, _ = collection_counts("174 failed, 20 passed, 12 errors in 30.0s")
+    passing = collected - 174
+    assert collected == 194
+    assert passing * 2 < collected, "this is the shape that must not reach a verdict"

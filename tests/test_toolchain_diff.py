@@ -6,7 +6,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from services.worker.toolchain import Sandbox, TestReport, capture_diff, diff_stats
+from services.worker.toolchain import (
+    Sandbox,
+    TestReport,
+    capture_diff,
+    collection_counts,
+    diff_stats,
+)
 
 
 @pytest.fixture
@@ -123,3 +129,35 @@ def test_an_upgrade_that_kills_an_import_is_still_a_break() -> None:
     # It reports true — the guard is the caller's phase, not the property.
     assert report.collection_failed
     assert not report.internal_error, "must never be blamed on pytest itself"
+
+
+def test_a_suite_with_some_importable_modules_is_usable() -> None:
+    """The rule that discarded twelve of twenty-four repositories.
+
+    flask-jwt-extended collects 107 tests and fails on three modules that import
+    `dateutil`. Judged on pytest's exit code the whole repository was refused;
+    judged on what it actually found, it is one of the better candidates we
+    have. A hundred usable tests is ample evidence for a repair.
+    """
+    collected, errors = collection_counts(
+        "107 tests collected, 3 errors in 0.47s\n"
+        "!!!! Interrupted: 3 errors during collection !!!!"
+    )
+    assert collected == 107
+    assert errors == 3
+
+
+def test_a_clean_collection_reports_no_errors() -> None:
+    collected, errors = collection_counts("42 tests collected in 1.20s")
+    assert (collected, errors) == (42, 0)
+
+
+def test_unparseable_output_is_zero_rather_than_a_crash() -> None:
+    """pytest's summary wording changes between versions; a fleet run must not."""
+    assert collection_counts("something else entirely") == (0, 0)
+
+
+def test_a_singular_test_is_counted() -> None:
+    """"1 test collected" — pytest drops the plural, and a regex that does not
+    expect that reports an empty suite for a repository that has one."""
+    assert collection_counts("1 test collected in 0.01s")[0] == 1

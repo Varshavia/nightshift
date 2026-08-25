@@ -68,6 +68,7 @@ from services.worker.toolchain import (
     clone,
     read_dependencies,
     run_tests,
+    upgrade_drift,
 )
 
 from nightshift_core.config import load_env_file
@@ -204,9 +205,14 @@ def probe_one(
             verdict=ProbeVerdict.NO_TESTS,
             baseline_seconds=baseline.duration_seconds,
         )
-    if baseline.collection_failed:
-        # Before an upgrade this is our environment, not their code. Kept out of
-        # BASELINE_RED so the denominator is not padded with our own failures.
+    if baseline.tests_collected == 0 and baseline.collection_errors:
+        # Nothing at all could be imported. Before an upgrade that is our
+        # environment, not their code, and it is kept out of BASELINE_RED so the
+        # denominator is not padded with our own failures.
+        #
+        # A suite that yields *some* tests is not here: 107 usable tests behind
+        # three modules wanting `dateutil` is a repository we can work with, and
+        # discarding it was how twelve of twenty-four were lost.
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.SUITE_UNRUNNABLE,
@@ -215,7 +221,32 @@ def probe_one(
             notes="collection failed before anything was changed; "
             + "; ".join(sandbox.install_log[-4:]),
         )
-    if not baseline.passed:
+    # A suite is usable when *something* in it passes. Demanding a perfectly
+    # green baseline sounds rigorous and is not: it discards a repository with a
+    # hundred passing tests over one that fails for a reason particular to this
+    # container, and it is why flask-jwt-extended — 106 passing, one failing on
+    # an unavailable crypto backend — was thrown away.
+    #
+    # What replaces it is stricter where it counts. The failures that exist
+    # before the upgrade are recorded by name and set aside; the break is what
+    # the upgrade *changed*. A test that was red stays red without counting
+    # against anything, and a test that was green and goes red is the finding,
+    # which is a sharper instrument than a single pass-or-fail bit.
+    already_failing = baseline.failures
+    passing = baseline.tests_collected - len(already_failing)
+
+    # How much green is actually standing behind a CLEAN. Loosening the rule to
+    # tolerate pre-existing failures was right; loosening it this far was not,
+    # and the first run under it produced three results that meant nothing:
+    # `code-examples-python` was called CLEAN with **no tests at all**, and
+    # `alerta` with 174 of its 194 tests already red. An upgrade verified by no
+    # tests is verified by nothing, and one verified by a tenth of a suite is
+    # barely better.
+    #
+    # A maintained project's suite does not arrive ninety percent red. When it
+    # looks that way the environment is wrong — alerta wants a database — and
+    # that is our limitation, which already has a name.
+    if passing <= 0:
         return ProbeResult(
             repo=repo,
             verdict=ProbeVerdict.BASELINE_RED,
@@ -224,7 +255,18 @@ def probe_one(
             # written down without the output that would explain it, and three
             # times the next question has been "why" with nothing to answer it.
             failing_output=baseline.output,
-            notes=f"pytest exit {baseline.exit_code}",
+            notes=f"pytest exit {baseline.exit_code}; nothing in the suite passes",
+        )
+    if passing * 2 < baseline.tests_collected:
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.SUITE_UNRUNNABLE,
+            baseline_seconds=baseline.duration_seconds,
+            failing_output=baseline.output,
+            notes=(
+                f"only {passing} of {baseline.tests_collected} tests pass before we "
+                "change anything; the environment is wrong, not the repository"
+            ),
         )
 
     dependencies = read_dependencies(repo_path)
@@ -263,15 +305,50 @@ def probe_one(
             notes=str(exc)[:500],
         )
 
+    # Did the upgrade actually happen? Asked of the environment, not of the
+    # manifest we just wrote. `apply_upgrade` rewrites pins and installs, and
+    # both halves can appear to succeed while the environment ends up somewhere
+    # else — a constraint elsewhere holding the old version down, a resolver
+    # backtracking, an install list that came out empty. A suite that stays
+    # green after an upgrade that did not happen is the most flattering result
+    # this probe can produce and the most worthless, and eight of eight came
+    # back CLEAN before this check was wired in.
+    drift = upgrade_drift(sandbox, fixable)
+    if drift:
+        return ProbeResult(
+            repo=repo,
+            verdict=ProbeVerdict.UPGRADE_FAILED,
+            upgrades=upgrades,
+            advisories=tuple(v.osv_id for v in fixable),
+            baseline_seconds=baseline.duration_seconds,
+            notes="the upgrade did not take: " + "; ".join(str(d) for d in drift),
+        )
+
     verified = run_tests(sandbox)
+    # The break is the difference, not the state. Anything red before the
+    # upgrade stays red without counting; anything that was green and is now red
+    # is what we came to find — including a module that imported cleanly and now
+    # does not, which is how an upgrade that removes a name announces itself,
+    # before a single test has run.
+    newly_failing = verified.failures - already_failing
+    still_green = not newly_failing
     return ProbeResult(
         repo=repo,
-        verdict=ProbeVerdict.CLEAN if verified.passed else ProbeVerdict.BREAKING,
+        verdict=ProbeVerdict.CLEAN if still_green else ProbeVerdict.BREAKING,
         upgrades=upgrades,
         advisories=tuple(v.osv_id for v in fixable),
         baseline_seconds=baseline.duration_seconds,
         verify_seconds=verified.duration_seconds,
-        failing_output="" if verified.passed else verified.output,
+        failing_output="" if still_green else verified.output,
+        notes=(
+            f"verified by {passing} passing tests "
+            f"({len(already_failing)} of {baseline.tests_collected} already failing)"
+            + (
+                ""
+                if still_green
+                else "; newly failing: " + ", ".join(sorted(newly_failing)[:12])
+            )
+        ),
     )
 
 

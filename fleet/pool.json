@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generated_at": "2026-08-24T14:50:04.764014+00:00",
-  "count": 22,
+  "count": 24,
   "entries": [
     {
       "repo": "Varshavia/throttled",
@@ -315,6 +315,34 @@
       "has_tests": true,
       "size_kb": 563,
       "added_at": "2026-08-24T16:58:07.021711+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/ok",
+      "upstream": "okpy/ok",
+      "license_id": "Apache-2.0",
+      "stars": 368,
+      "pinned_dependencies": 44,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 26796,
+      "added_at": "2026-08-24T19:26:53.631376+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/code-examples-python",
+      "upstream": "docusign/code-examples-python",
+      "license_id": "MIT",
+      "stars": 55,
+      "pinned_dependencies": 35,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 2653,
+      "added_at": "2026-08-24T19:26:54.885523+00:00",
       "notes": ""
     }
   ]
