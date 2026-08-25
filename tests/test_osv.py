@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from nightshift_core.models import Dependency, Severity
-from nightshift_core.osv import OSVClient, pick_fixed_version
+from nightshift_core.osv import OSV_API, OSVClient, pick_fixed_version
 
 AFFECTED = [
     {
@@ -124,3 +124,62 @@ def test_an_osv_outage_is_not_swallowed() -> None:
 
     with OSVClient(_transport(handler)) as client, pytest.raises(httpx.HTTPStatusError):
         client.query_batch([Dependency(name="requests", version="2.19.0")])
+
+
+def test_a_transient_server_error_is_retried_not_recorded_as_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One 503 cost us the best candidate in the pool.
+
+    OSV is a free public service and a fleet scan asks it thousands of questions
+    in minutes; it answers 503 sometimes. That says nothing about the repository
+    being scanned, and `flask-jwt-extended` — 107 usable tests, a cryptography
+    upgrade seven majors wide — was filed as PROBE_ERROR because of one.
+    """
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            return httpx.Response(503, text="unavailable")
+        return httpx.Response(200, json={"id": "GHSA-x", "affected": []})
+
+    client = OSVClient(httpx.Client(base_url=OSV_API, transport=httpx.MockTransport(handler)))
+
+    assert client.get_vulnerability("GHSA-x")["id"] == "GHSA-x"
+    assert attempts["n"] == 3
+
+
+def test_a_bad_request_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Asking a malformed question again, more slowly, does not improve it."""
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(400, text="malformed")
+
+    client = OSVClient(httpx.Client(base_url=OSV_API, transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_vulnerability("GHSA-x")
+    assert attempts["n"] == 1
+
+
+def test_a_service_that_stays_down_eventually_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retrying forever turns one bad night into a very slow bad night."""
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, text="unavailable")
+
+    client = OSVClient(httpx.Client(base_url=OSV_API, transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_vulnerability("GHSA-x")
+    assert attempts["n"] == 3

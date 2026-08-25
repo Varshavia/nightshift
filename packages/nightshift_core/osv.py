@@ -12,6 +12,8 @@ advisories appear in a great many repositories.
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Iterable, Sequence
 from typing import Any
 
@@ -25,6 +27,14 @@ __all__ = ["OSV_API", "OSVClient", "pick_fixed_version"]
 OSV_API = "https://api.osv.dev"
 
 #: OSV caps a batch at 1000 queries. Chunk below it rather than at it.
+log = logging.getLogger("nightshift.osv")
+
+#: Three attempts and no more. A fleet scan that keeps retrying a service which
+#: is genuinely down turns one bad night into a very slow bad night, and the
+#: verdict it would eventually record — PROBE_ERROR — is the same either way.
+_RETRY_ATTEMPTS = 3
+_RETRY_BASE_SECONDS = 1.0
+
 _BATCH_SIZE = 900
 
 _SEVERITY_BY_SCORE: tuple[tuple[float, Severity], ...] = (
@@ -103,6 +113,45 @@ class OSVClient:
         if self._owns_client:
             self._client.close()
 
+    # -- plumbing ----------------------------------------------------------- #
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """One OSV call, retried while the failure is plausibly temporary.
+
+        OSV is a free public service and a fleet scan asks it a few thousand
+        questions in a few minutes. It answers 503 sometimes; that is not a
+        statement about the repository being scanned, and it must not end up
+        recorded as one.
+
+        This is not a hypothetical either. A single 503 on one advisory ended
+        the probe of ``flask-jwt-extended`` — a repository with 107 usable tests
+        and a cryptography upgrade seven majors wide, which is to say the most
+        promising candidate in the pool — and filed it as PROBE_ERROR.
+
+        Only 5xx and transport errors are retried. A 400 means we asked a
+        malformed question and asking it again more slowly will not improve it.
+        """
+        delay = _RETRY_BASE_SECONDS
+        last: Exception | None = None
+        for attempt in range(_RETRY_ATTEMPTS):
+            try:
+                response = self._client.request(method, path, **kwargs)
+                if response.status_code < 500:
+                    response.raise_for_status()
+                    return response
+                last = httpx.HTTPStatusError(
+                    f"OSV answered {response.status_code}", request=response.request,
+                    response=response,
+                )
+            except httpx.TransportError as exc:
+                last = exc
+            if attempt < _RETRY_ATTEMPTS - 1:
+                log.info("OSV %s %s failed (%s); retrying in %.1fs", method, path, last, delay)
+                time.sleep(delay)
+                delay *= 2
+        assert last is not None
+        raise last
+
     # -- raw endpoints ------------------------------------------------------ #
 
     def query_batch(self, dependencies: Sequence[Dependency]) -> list[list[str]]:
@@ -124,8 +173,7 @@ class OSVClient:
                     for dep in chunk
                 ]
             }
-            response = self._client.post("/v1/querybatch", json=payload)
-            response.raise_for_status()
+            response = self._request("POST", "/v1/querybatch", json=payload)
             results = response.json().get("results", [])
             for index in range(len(chunk)):
                 entry = results[index] if index < len(results) else {}
@@ -137,8 +185,7 @@ class OSVClient:
         cached = self._details.get(osv_id)
         if cached is not None:
             return cached
-        response = self._client.get(f"/v1/vulns/{osv_id}")
-        response.raise_for_status()
+        response = self._request("GET", f"/v1/vulns/{osv_id}")
         detail: dict[str, Any] = response.json()
         self._details[osv_id] = detail
         return detail
