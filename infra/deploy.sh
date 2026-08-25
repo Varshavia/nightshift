@@ -16,9 +16,16 @@ set -euo pipefail
 # Cloud Run then handed to a Linux container, where the worker tried to mkdir a
 # drive letter and every job in the queue failed on it.
 #
-# Harmless everywhere else: both variables are read only by MSYS.
-export MSYS_NO_PATHCONV=1
-export MSYS2_ARG_CONV_EXCL="*"
+# Turning the conversion off is the obvious fix and it is worse than the bug:
+# gcloud on Windows is a Python script behind a bash wrapper that passes its own
+# `/c/Users/...` path back through the very conversion we would be disabling, so
+# `MSYS_NO_PATHCONV=1` stops the deployment at the first gcloud call with a
+# mangled `C:\c\Users\...`. The environment is not ours to reconfigure.
+#
+# So this script passes no absolute POSIX path at all. The workspace root is set
+# in services/worker/Dockerfile, where it belongs anyway: it names a directory
+# that exists inside the image, created and chowned there, and nothing outside
+# the image gets a say in where it is.
 
 PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
@@ -325,7 +332,7 @@ deploy_job() {
     --service-account "${sa}@${PROJECT}.iam.gserviceaccount.com" \
     --task-timeout "$timeout" \
     --max-retries 1 \
-    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
+    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
 }

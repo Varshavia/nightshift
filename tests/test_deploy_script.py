@@ -66,24 +66,49 @@ def test_the_fleet_never_deploys_with_upstream_prs_enabled() -> None:
     assert not re.search(r"ALLOW_UPSTREAM_PRS=(true|1|yes)", DEPLOY.read_text(encoding="utf-8"))
 
 
-def test_the_script_disables_msys_path_conversion() -> None:
-    """Git Bash rewrites POSIX-looking arguments into Windows paths.
+def test_the_script_does_not_switch_off_msys_path_conversion() -> None:
+    """The fix that was worse than the bug.
 
-    `NIGHTSHIFT_WORKSPACE_ROOT=/workspace` reached Cloud Run as
-    `C:/Program Files/Git/workspace`. gcloud accepted it, the deployment
-    reported success, and every job in the queue then failed inside a Linux
-    container trying to create a directory under a drive letter.
-
-    Nothing in bash's own syntax can catch this and nothing on Linux reproduces
-    it, so the guard is that the script says so out loud.
+    Git Bash rewriting `/workspace` into `C:/Program Files/Git/workspace` is
+    real, and turning the rewriting off is not the answer: gcloud on Windows is
+    a Python script behind a bash wrapper that hands its own `/c/Users/...`
+    path back through the same conversion, so suppressing it globally stopped
+    this script at its first gcloud call — `can't open file 'C:\\c\\Users\\...'`
+    — before a single API had been enabled.
     """
     text = DEPLOY.read_text(encoding="utf-8")
-    assert "MSYS_NO_PATHCONV=1" in text
-    assert 'MSYS2_ARG_CONV_EXCL="*"' in text
+    offenders = [
+        line
+        for line in lines()
+        if not line.lstrip().startswith("#")
+        and ("MSYS_NO_PATHCONV" in line or "MSYS2_ARG_CONV_EXCL" in line)
+    ]
+    assert not offenders, "suppressing MSYS conversion breaks gcloud's own wrapper"
+    assert "MSYS" in text, "the reasoning has to stay, or the next person re-adds it"
 
 
-def test_the_workspace_root_is_an_absolute_posix_path() -> None:
-    """The value that was silently rewritten. Asserted so a future edit that
-    quotes it differently, or drops the leading slash to dodge the conversion,
-    has to be deliberate."""
-    assert "NIGHTSHIFT_WORKSPACE_ROOT=/workspace" in DEPLOY.read_text(encoding="utf-8")
+def test_the_script_passes_no_absolute_posix_path_to_gcloud() -> None:
+    """Nothing to rewrite is the only defence that survives a Windows shell.
+
+    Every value this script sends is a project id, a region, a resource name or
+    a secret reference — none of which look like a path. The one that did,
+    `NIGHTSHIFT_WORKSPACE_ROOT=/workspace`, now lives in the worker image.
+    """
+    offenders = [
+        (number, line)
+        for number, line in enumerate(lines(), start=1)
+        if not line.lstrip().startswith("#") and re.search(r"=/[A-Za-z]", line)
+    ]
+    assert not offenders, (
+        "a POSIX path is passed at "
+        + ", ".join(f"line {n}" for n, _ in offenders)
+        + " — Git Bash will rewrite it; put it in the Dockerfile instead"
+    )
+
+
+def test_the_worker_image_declares_its_own_workspace_root() -> None:
+    """The other half of the same fix: the value did not vanish, it moved."""
+    dockerfile = DEPLOY.parent.parent / "services" / "worker" / "Dockerfile"
+    text = dockerfile.read_text(encoding="utf-8")
+    assert "ENV NIGHTSHIFT_WORKSPACE_ROOT=/workspace" in text
+    assert "mkdir -p /workspace" in text, "the root has to exist in the image that names it"
