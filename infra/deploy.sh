@@ -10,6 +10,16 @@
 #
 set -euo pipefail
 
+# Git Bash on Windows rewrites anything in an argument that looks like a POSIX
+# path into a Windows one before the command ever runs. `/workspace` became
+# `C:/Program Files/Git/workspace`, which gcloud accepted without comment and
+# Cloud Run then handed to a Linux container, where the worker tried to mkdir a
+# drive letter and every job in the queue failed on it.
+#
+# Harmless everywhere else: both variables are read only by MSYS.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
 TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"

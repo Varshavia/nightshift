@@ -64,3 +64,26 @@ def test_the_fleet_never_deploys_with_upstream_prs_enabled() -> None:
     """RESPONSIBLE_USE.md's central promise, asserted where it is configured."""
     assert "ALLOW_UPSTREAM_PRS=false" in DEPLOY.read_text(encoding="utf-8")
     assert not re.search(r"ALLOW_UPSTREAM_PRS=(true|1|yes)", DEPLOY.read_text(encoding="utf-8"))
+
+
+def test_the_script_disables_msys_path_conversion() -> None:
+    """Git Bash rewrites POSIX-looking arguments into Windows paths.
+
+    `NIGHTSHIFT_WORKSPACE_ROOT=/workspace` reached Cloud Run as
+    `C:/Program Files/Git/workspace`. gcloud accepted it, the deployment
+    reported success, and every job in the queue then failed inside a Linux
+    container trying to create a directory under a drive letter.
+
+    Nothing in bash's own syntax can catch this and nothing on Linux reproduces
+    it, so the guard is that the script says so out loud.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert "MSYS_NO_PATHCONV=1" in text
+    assert 'MSYS2_ARG_CONV_EXCL="*"' in text
+
+
+def test_the_workspace_root_is_an_absolute_posix_path() -> None:
+    """The value that was silently rewritten. Asserted so a future edit that
+    quotes it differently, or drops the leading slash to dodge the conversion,
+    has to be deliberate."""
+    assert "NIGHTSHIFT_WORKSPACE_ROOT=/workspace" in DEPLOY.read_text(encoding="utf-8")
