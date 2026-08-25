@@ -94,8 +94,21 @@ grant nightshift-api "projects/${PROJECT}/roles/nightshiftApprover"
 grant nightshift-scanner roles/cloudtrace.agent
 grant nightshift-worker  roles/cloudtrace.agent
 
-# Only the worker opens pull requests, so only the worker reads the token.
+# Two tokens, because the two services need opposite things from GitHub.
+#
+# The worker opens pull requests and needs a credential that can write. The
+# scanner only reads manifests — but it cannot do that anonymously either: the
+# unauthenticated quota is sixty requests an hour, a pool of three hundred
+# repositories needs several times that in a single scan, and a refused request
+# does not look refused. It comes back as a repository with no tests and no
+# pins, which is a wrong answer rather than an error.
+#
+# So the scanner gets a token with no scopes at all. That is not a smaller
+# version of the worker's credential; it is a different kind of thing — one
+# that can read public data and cannot write anywhere, by construction rather
+# than by policy.
 grant nightshift-worker roles/secretmanager.secretAccessor
+grant nightshift-scanner roles/secretmanager.secretAccessor
 
 # The scheduler calls the scanner job as this account, so it has to be allowed
 # to invoke it. Without this the nightly run fails with a 403 that looks like a
@@ -131,6 +144,24 @@ if ! gcloud secrets describe nightshift-github-token --project "$PROJECT" >/dev/
   # Piped rather than passed as an argument: a token on a command line ends up
   # in shell history and in the process list.
   printf %s "$GITHUB_TOKEN" | gcloud secrets create nightshift-github-token \
+    --data-file=- --project "$PROJECT" --quiet
+fi
+
+if ! gcloud secrets describe nightshift-github-read-token --project "$PROJECT" >/dev/null 2>&1; then
+  if [[ -z "${GITHUB_READ_TOKEN:-}" ]]; then
+    say "GITHUB_READ_TOKEN is not set and the read-only secret does not exist yet"
+    echo "  The scanner reads manifests through the GitHub API. Anonymously that is" >&2
+    echo "  sixty requests an hour, which one scan of this pool exceeds several times" >&2
+    echo "  over — and a refused request comes back looking like a repository with no" >&2
+    echo "  tests rather than like an error." >&2
+    echo "" >&2
+    echo "  Create a classic token with NO scopes ticked — it can read public data and" >&2
+    echo "  write nothing — then:" >&2
+    echo "    export GITHUB_READ_TOKEN=ghp_..." >&2
+    exit 1
+  fi
+  say "creating secret nightshift-github-read-token"
+  printf %s "$GITHUB_READ_TOKEN" | gcloud secrets create nightshift-github-read-token \
     --data-file=- --project "$PROJECT" --quiet
 fi
 
@@ -228,11 +259,11 @@ deploy_job() {
   # here. A deployment script has to declare the whole desired state; one that
   # only ever adds is not idempotent, whatever its comments claim.
   local secret_args
-  if [[ "$wants_token" == "token" ]]; then
-    secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-token:latest")
-  else
-    secret_args=(--clear-secrets)
-  fi
+  case "$wants_token" in
+    write) secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-token:latest") ;;
+    read)  secret_args=(--set-secrets "GITHUB_TOKEN=nightshift-github-read-token:latest") ;;
+    *)     secret_args=(--clear-secrets) ;;
+  esac
   build_and_push "$service"
   say "deploying job ${service}"
   gcloud run jobs deploy "nightshift-${service}" \
@@ -247,8 +278,8 @@ deploy_job() {
 }
 
 case "$TARGET" in
-  scanner|all) deploy_job scanner nightshift-scanner 900s ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s token ;;&
+  scanner|all) deploy_job scanner nightshift-scanner 900s read ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write ;;&
   api|all)
     build_and_push api
     say "deploying api"
