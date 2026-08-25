@@ -43,6 +43,51 @@ def service_requirements(service: str) -> set[str]:
     }
 
 
+#: Which distribution provides which ``google.cloud`` module. Short, explicit,
+#: and only what this project actually imports — inferring it would mean
+#: querying PyPI from a unit test, which is a worse idea than typing four lines.
+_GOOGLE_CLOUD_DISTRIBUTIONS = {
+    "firestore": "google-cloud-firestore",
+    "pubsub_v1": "google-cloud-pubsub",
+    "trace_v1": "google-cloud-trace",
+    "storage": "google-cloud-storage",
+}
+
+
+def google_cloud_imports(service: str) -> set[str]:
+    """Distributions a service imports from ``google.cloud``, found by reading.
+
+    These imports live *inside* functions, deliberately: it keeps the domain
+    runnable on a laptop with no cloud libraries. The cost is that a missing one
+    is invisible until a container reaches that exact line in production, which
+    is how the worker shipped without `google-cloud-pubsub` and died the first
+    time anything asked it to consume a message.
+    """
+    found: set[str] = set()
+    for path in (ROOT / "services" / service).rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for module in re.findall(r"from google\.cloud import (\w+)", text):
+            found.add(_GOOGLE_CLOUD_DISTRIBUTIONS.get(module, f"google-cloud-{module}"))
+        for module in re.findall(r"import google\.cloud\.(\w+)", text):
+            found.add(_GOOGLE_CLOUD_DISTRIBUTIONS.get(module, f"google-cloud-{module}"))
+    return found
+
+
+@pytest.mark.parametrize("service", SERVICES)
+def test_a_service_installs_the_cloud_libraries_it_imports(service: str) -> None:
+    """The check that would have caught the worker shipping without Pub/Sub.
+
+    The earlier test asserts each image installs what the *domain* declares.
+    This one asks the narrower and more dangerous question: does the service
+    install what its own code reaches for at run time?
+    """
+    missing = google_cloud_imports(service) - service_requirements(service)
+    assert not missing, (
+        f"services/{service} imports {sorted(missing)} but does not install it. "
+        "The import is inside a function, so this fails in the cloud rather than here."
+    )
+
+
 @pytest.mark.parametrize("service", SERVICES)
 def test_a_service_installs_everything_the_domain_imports(service: str) -> None:
     missing = domain_dependencies() - service_requirements(service)
