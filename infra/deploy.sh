@@ -54,11 +54,35 @@ create_sa() {
   fi
 }
 
+# The project's IAM policy, read once. Every `add-iam-policy-binding` is a
+# read-modify-write of the whole policy with its own retry loop on etag
+# conflicts, and this script has sixteen of them. Re-applying bindings that
+# already exist turned each deployment into several minutes of watching
+# "Updated IAM policy" scroll past — long enough that the first person to see it
+# reasonably concluded the script had hung.
+POLICY="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
+
 grant() {
   local name="$1" role="$2"
+  local member="serviceAccount:${name}@${PROJECT}.iam.gserviceaccount.com"
+
+  # Already there? Then there is nothing to say. Checked against the snapshot
+  # rather than re-fetched, because the whole point is to avoid the round trip.
+  if printf '%s' "$POLICY" | python -c "
+import json, sys
+policy = json.load(sys.stdin)
+role, member = sys.argv[1], sys.argv[2]
+bindings = [b for b in policy.get('bindings', []) if b.get('role') == role]
+sys.exit(0 if any(member in b.get('members', []) for b in bindings) else 1)
+" "$role" "$member"; then
+    return 0
+  fi
+
+  say "granting ${role} to ${name}"
   gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member "serviceAccount:${name}@${PROJECT}.iam.gserviceaccount.com" \
-    --role "$role" --condition=None --quiet >/dev/null
+    --member "$member" --role "$role" --condition=None --quiet >/dev/null
+  # Keep the snapshot in step so a repeated grant in the same run is a no-op.
+  POLICY="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
 }
 
 create_sa nightshift-scanner "Nightshift scanner"
