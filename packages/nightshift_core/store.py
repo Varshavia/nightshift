@@ -14,13 +14,24 @@ attempt; checkpointing finer would triple the writes to buy back seconds.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 from nightshift_core.models import Outcome, RepoJob
 
-__all__ = ["FirestoreJobStore", "JobStore", "MemoryJobStore"]
+__all__ = [
+    "Approval",
+    "ApprovalStore",
+    "FirestoreApprovalStore",
+    "FirestoreJobStore",
+    "JobStore",
+    "MemoryApprovalStore",
+    "MemoryJobStore",
+]
 
 _COLLECTION = "nightshift_jobs"
+_APPROVALS = "nightshift_approvals"
 
 
 @runtime_checkable
@@ -102,3 +113,131 @@ def outcome_counts(store: JobStore, *, run_id: str | None = None) -> dict[str, i
     for job in store.list_jobs(run_id=run_id):
         counts[str(job.outcome) if job.outcome else "IN_FLIGHT"] += 1
     return counts
+
+
+# --------------------------------------------------------------------------- #
+# Upstream approvals
+# --------------------------------------------------------------------------- #
+#
+# `ALLOW_UPSTREAM_PRS` is false and stays false. An approval is the narrow,
+# per-repository exception to it: a named person deciding that one repository's
+# pull request may go to its upstream rather than sitting on our fork.
+#
+# It is stored rather than configured because RESPONSIBLE_USE.md promises the
+# decision is recorded and revocable, and a flag in an environment variable is
+# neither. There is no bulk approve and there will not be one — the type below
+# takes a single repository, which is the cheapest possible way to make that
+# guarantee structural instead of cultural.
+
+
+@dataclass(frozen=True, slots=True)
+class Approval:
+    """One person allowing one repository's pull request upstream."""
+
+    repo: str
+    approver: str
+    approved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.repo.strip():
+            raise ValueError("an approval must name a repository")
+        if not self.approver.strip():
+            # Unattributed approval is indistinguishable from no approval, and
+            # the whole point of recording it is that somebody's name is on it.
+            raise ValueError("an approval must name who gave it")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "repo": self.repo,
+            "approver": self.approver,
+            "approved_at": self.approved_at.isoformat(),
+            "note": self.note,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Approval:
+        return cls(
+            repo=data["repo"],
+            approver=data["approver"],
+            approved_at=datetime.fromisoformat(data["approved_at"])
+            if data.get("approved_at")
+            else datetime.now(UTC),
+            note=data.get("note", ""),
+        )
+
+
+@runtime_checkable
+class ApprovalStore(Protocol):
+    def approve(self, approval: Approval) -> None: ...
+
+    def revoke(self, repo: str) -> None: ...
+
+    def approved(self, repo: str) -> Approval | None: ...
+
+    def list_approvals(self) -> list[Approval]: ...
+
+
+class MemoryApprovalStore:
+    def __init__(self) -> None:
+        self._by_repo: dict[str, Approval] = {}
+
+    def approve(self, approval: Approval) -> None:
+        self._by_repo[approval.repo] = approval
+
+    def revoke(self, repo: str) -> None:
+        self._by_repo.pop(repo, None)
+
+    def approved(self, repo: str) -> Approval | None:
+        return self._by_repo.get(repo)
+
+    def list_approvals(self) -> list[Approval]:
+        return sorted(self._by_repo.values(), key=lambda a: a.repo)
+
+
+class FirestoreApprovalStore:
+    """Approvals in Firestore, keyed by repository.
+
+    The document id is the repository with its slash replaced, because Firestore
+    document ids may not contain one. Keying by repository rather than appending
+    events means approving twice is idempotent and revoking is a delete — both
+    of which a reviewer can reason about without reading a log.
+    """
+
+    def __init__(self, *, project: str, database: str = "(default)") -> None:
+        self._project = project
+        self._database = database
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            from google.cloud import firestore  # imported here, not at module load
+
+            self._client = firestore.Client(project=self._project, database=self._database)
+        return self._client
+
+    @staticmethod
+    def _document_id(repo: str) -> str:
+        return repo.replace("/", "__")
+
+    def approve(self, approval: Approval) -> None:
+        self.client.collection(_APPROVALS).document(self._document_id(approval.repo)).set(
+            approval.to_dict()
+        )
+
+    def revoke(self, repo: str) -> None:
+        self.client.collection(_APPROVALS).document(self._document_id(repo)).delete()
+
+    def approved(self, repo: str) -> Approval | None:
+        snapshot = self.client.collection(_APPROVALS).document(self._document_id(repo)).get()
+        if not snapshot.exists:
+            return None
+        return Approval.from_dict(snapshot.to_dict())
+
+    def list_approvals(self) -> list[Approval]:
+        documents = self.client.collection(_APPROVALS).stream()
+        return sorted(
+            (Approval.from_dict(doc.to_dict()) for doc in documents),
+            key=lambda a: a.repo,
+        )

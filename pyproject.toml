@@ -25,6 +25,9 @@ dev = [
     # policy-gated tools, and that assertion is worthless if CI cannot import
     # the package and quietly skips it.
     "google-adk>=2.0",
+    # Same reasoning as google-adk: the control tower's routes are asserted on,
+    # and an assertion CI cannot import is an assertion that quietly passes.
+    "fastapi>=0.115",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "respx>=0.21",

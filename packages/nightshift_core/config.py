@@ -135,6 +135,10 @@ class Settings:
     fleet_pool_path: str = "fleet/pool.json"
     #: Read from the environment, never logged, never persisted, never defaulted.
     github_token: str | None = None
+    #: Guards the one write the control tower exposes. Empty means the endpoint
+    #: refuses everything, which is the right default: a dashboard deployed
+    #: without one can be read by anyone and can send nothing upstream.
+    approval_key: str = ""
 
     allow_upstream_prs: bool = False
     ceilings: Ceilings = field(default_factory=Ceilings)
@@ -154,6 +158,7 @@ class Settings:
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),
             fleet_pool_path=_env("NIGHTSHIFT_FLEET_POOL", "fleet/pool.json"),
             github_token=_env("GITHUB_TOKEN") or None,
+            approval_key=_env("NIGHTSHIFT_APPROVAL_KEY"),
             allow_upstream_prs=_env_bool("ALLOW_UPSTREAM_PRS", False),
             ceilings=Ceilings.from_env(),
         )

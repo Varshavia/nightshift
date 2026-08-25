@@ -75,9 +75,19 @@ grant nightshift-worker roles/pubsub.subscriber
 grant nightshift-worker roles/datastore.user
 grant nightshift-worker roles/aiplatform.user
 
-# The API reads. Deliberately no datastore.owner — approvals write one field
-# through a narrow path, not a broad role.
-grant nightshift-api roles/datastore.viewer
+# The API reads, and writes exactly one thing: an approval. `datastore.viewer`
+# cannot write at all and `datastore.user` can write anything, so neither says
+# what this service actually does — a custom role does, and it is the difference
+# between least privilege as a comment and least privilege as configuration.
+if ! gcloud iam roles describe nightshiftApprover --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating custom role nightshiftApprover"
+  gcloud iam roles create nightshiftApprover --project "$PROJECT" \
+    --title "Nightshift control tower" \
+    --description "Read jobs; write approvals. Nothing else." \
+    --permissions "datastore.entities.get,datastore.entities.list,datastore.entities.create,datastore.entities.update,datastore.entities.delete" \
+    --stage GA --quiet
+fi
+grant nightshift-api "projects/${PROJECT}/roles/nightshiftApprover"
 
 # Everything that runs writes spans, because the cost curve is a query over them
 # and a service that cannot write a span drops out of the number silently.
@@ -123,6 +133,15 @@ if ! gcloud secrets describe nightshift-github-token --project "$PROJECT" >/dev/
   printf %s "$GITHUB_TOKEN" | gcloud secrets create nightshift-github-token \
     --data-file=- --project "$PROJECT" --quiet
 fi
+
+# Guards the one write the control tower exposes. Generated rather than asked
+# for: a key a person invents during a deployment is a key a person reuses.
+if ! gcloud secrets describe nightshift-approval-key --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating secret nightshift-approval-key"
+  python -c "import secrets; print(secrets.token_urlsafe(32), end='')" \
+    | gcloud secrets create nightshift-approval-key --data-file=- --project "$PROJECT" --quiet
+fi
+grant nightshift-api roles/secretmanager.secretAccessor
 
 # --------------------------------------------------------------------------- #
 # Firestore, Pub/Sub, Artifact Registry
@@ -239,6 +258,7 @@ case "$TARGET" in
       --service-account "nightshift-api@${PROJECT}.iam.gserviceaccount.com" \
       --no-allow-unauthenticated \
       --set-env-vars "NIGHTSHIFT_GCP_PROJECT=${PROJECT}" \
+      --set-secrets "NIGHTSHIFT_APPROVAL_KEY=nightshift-approval-key:latest" \
       --quiet
     ;;
 esac

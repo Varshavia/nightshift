@@ -22,4 +22,7 @@ COPY services/api/ services/api/
 
 USER 1000
 EXPOSE 8080
-CMD ["uvicorn", "services.api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]
+# Cloud Run tells the container which port to listen on and is entitled to
+# change it; a hardcoded 8080 works right up until it does not, and the
+# symptom is a revision that never passes its startup probe.
+CMD exec uvicorn services.api.main:create_app --factory --host 0.0.0.0 --port "${PORT:-8080}"
