@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from nightshift_core import config
-from nightshift_core.config import get_settings, load_env_file
+from nightshift_core.config import Settings, get_settings, load_env_file
 
 
 @pytest.fixture(autouse=True)
@@ -143,3 +143,29 @@ def test_a_secret_never_reaches_the_logs(
         load_env_file(path)
 
     assert "github_pat_secret" not in caplog.text
+
+
+def test_a_dashboard_needs_a_project_and_no_opinion_about_forks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control tower reads. It never forks, so it must not demand a fork org.
+
+    The combined check made a read-only dashboard fail in production with
+    "missing NIGHTSHIFT_FORK_ORG" — true, unhelpful, and about a capability the
+    service does not have. The symptom was a 500 on every page.
+    """
+    monkeypatch.delenv("NIGHTSHIFT_FORK_ORG", raising=False)
+    settings = Settings(gcp_project="nightshift-506519", fork_org="")
+
+    settings.require_project()  # must not raise
+
+    with pytest.raises(RuntimeError, match="NIGHTSHIFT_FORK_ORG"):
+        settings.require_cloud()
+
+
+def test_a_service_that_opens_pull_requests_must_know_where_they_go() -> None:
+    """A worker that learns this at PR time has already spent the tokens."""
+    with pytest.raises(RuntimeError, match="NIGHTSHIFT_GCP_PROJECT"):
+        Settings(gcp_project="", fork_org="Varshavia").require_cloud()
+
+    Settings(gcp_project="p", fork_org="Varshavia").require_cloud()

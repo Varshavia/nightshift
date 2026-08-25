@@ -28,7 +28,8 @@ log = logging.getLogger("nightshift.api")
 
 def get_store() -> JobStore:
     settings = get_settings()
-    settings.require_cloud()
+    # A project, not a fork organisation: this service reads and never forks.
+    settings.require_project()
     return FirestoreJobStore(
         project=settings.gcp_project, database=settings.firestore_database
     )
@@ -134,7 +135,7 @@ def _pr_cell(job: dict[str, Any]) -> str:
 
 def get_approvals() -> ApprovalStore:
     settings = get_settings()
-    settings.require_cloud()
+    settings.require_project()
     return FirestoreApprovalStore(
         project=settings.gcp_project, database=settings.firestore_database
     )
