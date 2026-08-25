@@ -287,7 +287,21 @@ case "$TARGET" in
       --image "${IMAGE_BASE}/api:latest" \
       --region "$REGION" --project "$PROJECT" \
       --service-account "nightshift-api@${PROJECT}.iam.gserviceaccount.com" \
-      --no-allow-unauthenticated \
+      # Public, deliberately, and only because the code draws the line
+      # elsewhere. What this service discloses is what our own fleet did to our
+      # own forks — outcome counts, phases, links to pull requests that are
+      # already public on GitHub. Nothing here is anyone else's to lose.
+      #
+      # The one thing that is not a read — approving a repository's pull request
+      # to go upstream, which puts our output in front of somebody else's
+      # project — is refused without NIGHTSHIFT_APPROVAL_KEY, and refused by
+      # default when no key is configured at all.
+      #
+      # The alternative, IAM on the whole service, would mean anyone reviewing
+      # this project needs a Google identity and a token to see a dashboard of
+      # public information. That is not security, it is a locked door on an
+      # empty room.
+      --allow-unauthenticated \
       --set-env-vars "NIGHTSHIFT_GCP_PROJECT=${PROJECT}" \
       --set-secrets "NIGHTSHIFT_APPROVAL_KEY=nightshift-approval-key:latest" \
       --quiet
