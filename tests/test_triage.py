@@ -9,7 +9,7 @@ from services.scanner import main as scanner_main
 from services.scanner.main import triage
 
 from nightshift_core.config import Settings
-from nightshift_core.models import RepoJob, Severity, Vulnerability
+from nightshift_core.models import Dependency, RepoJob, Severity, Vulnerability
 
 
 def make(package: str, severity: Severity, fixed: str | None = "2.0") -> Vulnerability:
@@ -144,3 +144,106 @@ def test_one_message_per_repository_not_per_advisory(
 
     assert len(publisher.calls) == 1
     assert len(json.loads(publisher.calls[0][1])["vulnerabilities"]) == 3
+
+
+class _Store:
+    def __init__(self) -> None:
+        self.jobs: list[RepoJob] = []
+
+    def put(self, job: RepoJob) -> None:
+        self.jobs.append(job)
+
+    def get(self, job_id: str) -> RepoJob | None:
+        return next((j for j in self.jobs if j.job_id == job_id), None)
+
+    def list_jobs(self, *, run_id: str | None = None) -> list[RepoJob]:
+        return list(self.jobs)
+
+
+def test_one_repository_failing_does_not_end_the_night(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A scan reads from a service that rate-limits and sometimes answers 500.
+
+    Letting any of that end the run means twenty-three repositories go unscanned
+    because the fourth had a bad minute — and the morning cannot tell that from
+    a fleet with nothing wrong in it.
+    """
+    monkeypatch.setattr(scanner_main, "load_fleet", lambda settings: ["a/one", "a/two", "a/three"])
+
+    def flaky(repo: str, client: object | None = None) -> list[Dependency]:
+        if repo == "a/two":
+            raise RuntimeError("GitHub said 500")
+        return [Dependency(name="jinja2", version="2.11.3")]
+
+    monkeypatch.setattr(scanner_main, "read_manifests", flaky)
+    monkeypatch.setattr(scanner_main, "publish", lambda job, settings: "id")
+
+    class _NoVulns:
+        def __enter__(self) -> _NoVulns:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def find_vulnerabilities(self, deps: object) -> list[Vulnerability]:
+            return []
+
+    monkeypatch.setattr(scanner_main, "OSVClient", _NoVulns)
+
+    result = scanner_main.scan(
+        Settings(gcp_project="p", fork_org="org"), store=_Store()
+    )
+
+    assert result.repos_scanned == 2
+    assert result.skipped == ("a/two",), "the skipped repository must be named, not merely absent"
+
+
+def test_a_job_is_recorded_before_it_is_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dashboard reads Firestore, not Pub/Sub.
+
+    A job that exists only as a message is invisible until a worker happens to
+    pick it up, which shows an idle fleet that is in fact busy. Recording first
+    also means no message can arrive referring to a job nobody has heard of.
+    """
+    order: list[str] = []
+    store = _Store()
+
+    monkeypatch.setattr(scanner_main, "load_fleet", lambda settings: ["a/one"])
+    monkeypatch.setattr(
+        scanner_main,
+        "read_manifests",
+        lambda repo, client=None: [Dependency(name="jinja2", version="1.0")],
+    )
+    def record_publish(job: RepoJob, settings: Settings) -> str:
+        order.append("published")
+        return "message-1"
+
+    monkeypatch.setattr(scanner_main, "publish", record_publish)
+
+    class _OneVuln:
+        def __enter__(self) -> _OneVuln:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def find_vulnerabilities(self, deps: object) -> list[Vulnerability]:
+            return [make("jinja2", Severity.HIGH)]
+
+    monkeypatch.setattr(scanner_main, "OSVClient", _OneVuln)
+
+    original_put = store.put
+
+    def watched(job: RepoJob) -> None:
+        order.append("recorded")
+        original_put(job)
+
+    store.put = watched  # type: ignore[method-assign]
+
+    result = scanner_main.scan(Settings(gcp_project="p", fork_org="org"), store=store)
+
+    assert result.jobs_published == 1
+    assert order == ["recorded", "published"]
