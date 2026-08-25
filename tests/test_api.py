@@ -31,13 +31,13 @@ class _RaisingStore:
 
 
 def test_the_health_probe_never_touches_the_database() -> None:
-    """Cloud Run probes this before a revision goes live.
+    """Cloud Run probes the container before a revision goes live.
 
     A probe that reached Firestore would turn a slow database into a failed
     deployment, which is the sort of coupling that only shows itself at the
     worst possible moment.
     """
-    response = TestClient(api.create_app()).get("/healthz")
+    response = TestClient(api.create_app()).get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

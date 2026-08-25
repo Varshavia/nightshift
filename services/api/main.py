@@ -173,9 +173,15 @@ def create_app() -> Any:
     the tests and the local runner do — neither constructs a Firestore client
     nor requires FastAPI to be installed.
 
-    ``/healthz`` deliberately touches nothing. Cloud Run probes it before the
-    revision goes live, and a probe that reached Firestore would turn a slow
-    database into a failed deployment.
+    ``/health`` deliberately touches nothing. Cloud Run probes the container
+    port before a revision goes live, and a probe that reached Firestore would
+    turn a slow database into a failed deployment.
+
+    It is ``/health`` and not ``/healthz`` because the latter never arrives:
+    requests to it are answered by Google's frontend with a 404 that our logs
+    never see, while ``/``, ``/robots.txt`` and ``/openapi.json`` all reach the
+    container normally. Renaming costs nothing and beats arguing with
+    infrastructure about a path name.
     """
     from fastapi import FastAPI, Header, HTTPException
     from fastapi.responses import HTMLResponse
@@ -185,8 +191,8 @@ def create_app() -> Any:
         summary="What happened last night, and what needs a human.",
     )
 
-    @app.get("/healthz")
-    def healthz() -> dict[str, str]:
+    @app.get("/health")
+    def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/", response_class=HTMLResponse)
