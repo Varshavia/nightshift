@@ -4,7 +4,13 @@ CI: importing it must not require credentials."""
 from __future__ import annotations
 
 from nightshift_core.models import Outcome, RepoJob
-from nightshift_core.store import FirestoreJobStore, JobStore, MemoryJobStore, outcome_counts
+from nightshift_core.store import (
+    FirestoreJobStore,
+    JobStore,
+    MemoryJobStore,
+    document_id,
+    outcome_counts,
+)
 
 
 def test_memory_store_satisfies_the_protocol() -> None:
@@ -39,3 +45,26 @@ def test_firestore_store_constructs_without_credentials() -> None:
     """The client is lazy on purpose: the domain stays runnable on a laptop."""
     store = FirestoreJobStore(project="nightshift-test")
     assert store._client is None
+
+
+def test_a_job_id_containing_a_repository_is_a_usable_document_id() -> None:
+    """Firestore reads `/` as a path separator, and a job id contains one.
+
+    `run1:Varshavia/throttled` is not a document id — it is three path elements,
+    and the client refuses it outright. The identifier has carried a repository
+    name since the first commit and this only surfaced the first night anything
+    wrote a job to Firestore, because every earlier write went to the in-memory
+    store, where a slash is just a character.
+    """
+    assert "/" not in document_id("run1:Varshavia/throttled")
+    assert document_id("run1:Varshavia/throttled") == "run1:Varshavia__throttled"
+
+
+def test_two_different_repositories_never_collide() -> None:
+    """The rewrite has to stay injective or one repository overwrites another."""
+    assert document_id("run1:org/a") != document_id("run1:org/b")
+    assert document_id("run1:org-a/x") != document_id("run1:org/a-x")
+
+
+def test_an_identifier_with_no_slash_is_left_alone() -> None:
+    assert document_id("run1") == "run1"

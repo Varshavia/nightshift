@@ -28,10 +28,30 @@ __all__ = [
     "JobStore",
     "MemoryApprovalStore",
     "MemoryJobStore",
+    "document_id",
 ]
 
 _COLLECTION = "nightshift_jobs"
 _APPROVALS = "nightshift_approvals"
+
+
+def document_id(identifier: str) -> str:
+    """A Firestore document id built from something that may contain a slash.
+
+    Firestore reads ``/`` as a path separator, so ``run1:Varshavia/throttled``
+    is not a document id at all — it is three path elements, and the client
+    refuses it with "a document must have an even number of path elements".
+
+    This bit the job store on the first night anything actually wrote a job: the
+    identifier had contained a repository name since the first commit, and until
+    then every write had been to the in-memory store, where a slash is just a
+    character. The approvals store was written later and keyed by repository, so
+    the problem was obvious there and invisible here.
+
+    The identifier itself is unchanged in the document body. Only the key is
+    rewritten, so nothing downstream has to know this happened.
+    """
+    return identifier.replace("/", "__")
 
 
 @runtime_checkable
@@ -92,10 +112,10 @@ class FirestoreJobStore:
         return self._client
 
     def put(self, job: RepoJob) -> None:
-        self.client.collection(_COLLECTION).document(job.job_id).set(job.to_dict())
+        self.client.collection(_COLLECTION).document(document_id(job.job_id)).set(job.to_dict())
 
     def get(self, job_id: str) -> RepoJob | None:
-        snapshot = self.client.collection(_COLLECTION).document(job_id).get()
+        snapshot = self.client.collection(_COLLECTION).document(document_id(job_id)).get()
         if not snapshot.exists:
             return None
         return RepoJob.from_dict(snapshot.to_dict())
@@ -217,20 +237,16 @@ class FirestoreApprovalStore:
             self._client = firestore.Client(project=self._project, database=self._database)
         return self._client
 
-    @staticmethod
-    def _document_id(repo: str) -> str:
-        return repo.replace("/", "__")
-
     def approve(self, approval: Approval) -> None:
-        self.client.collection(_APPROVALS).document(self._document_id(approval.repo)).set(
+        self.client.collection(_APPROVALS).document(document_id(approval.repo)).set(
             approval.to_dict()
         )
 
     def revoke(self, repo: str) -> None:
-        self.client.collection(_APPROVALS).document(self._document_id(repo)).delete()
+        self.client.collection(_APPROVALS).document(document_id(repo)).delete()
 
     def approved(self, repo: str) -> Approval | None:
-        snapshot = self.client.collection(_APPROVALS).document(self._document_id(repo)).get()
+        snapshot = self.client.collection(_APPROVALS).document(document_id(repo)).get()
         if not snapshot.exists:
             return None
         return Approval.from_dict(snapshot.to_dict())
