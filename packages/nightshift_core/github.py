@@ -28,6 +28,7 @@ import httpx
 
 __all__ = [
     "GITHUB_API",
+    "BadCredential",
     "GitHubClient",
     "GitHubError",
     "RateLimited",
@@ -49,6 +50,21 @@ _PAGE_SIZE = 100
 
 class GitHubError(RuntimeError):
     """A GitHub request failed in a way the caller has to know about."""
+
+
+class BadCredential(GitHubError):
+    """GitHub rejected the token itself.
+
+    Its own type for the same reason ``RateLimited`` has one: the remedy is
+    about the run, not about the repository the request happened to name. A
+    scan that skips each repository in turn on a 401 surveys nothing and reports
+    that it surveyed nothing wrong — twenty-four skips and a clean exit, which
+    is precisely the shape of failure this project refuses to have.
+
+    A 401 also means a credential *was* sent. Anonymous requests to public
+    repositories answer 200; they are merely rate-limited. So this is never
+    "we forgot the token" — it is "the token we have is not accepted".
+    """
 
 
 class WrongTokenType(GitHubError):
@@ -163,8 +179,23 @@ class GitHubClient:
 
     def _get(self, path: str, **params: Any) -> httpx.Response:
         response = self._client.get(path, params=params or None)
+        self._raise_if_unauthorised(response)
         self._raise_if_rate_limited(response)
         return response
+
+    @staticmethod
+    def _raise_if_unauthorised(response: httpx.Response) -> None:
+        if response.status_code != 401:
+            return
+        raise BadCredential(
+            "GitHub rejected the token (401). It is expired, revoked, or was "
+            "stored wrongly — a truncated value and a real one are the same "
+            "length to everything except GitHub. Check what the secret actually "
+            "holds:\n"
+            "  gcloud secrets versions access latest --secret=<name>\n"
+            "and verify it directly:\n"
+            "  curl -sS -H 'Authorization: Bearer <token>' https://api.github.com/user"
+        )
 
     @staticmethod
     def _raise_if_rate_limited(response: httpx.Response) -> None:
