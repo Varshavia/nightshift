@@ -150,7 +150,7 @@ def test_a_stalled_job_is_not_rendered_as_work_in_progress() -> None:
     was false was the badge beside it, which claimed the fleet was busy with
     work its containers had already been killed for.
     """
-    row = api._row({"repo": "a/b", "phase": "CLONING", "stalled": True})
+    row = api._row({"repo": "a/b", "phase": "CLONING", "state": "ABANDONED"})
 
     assert "ABANDONED" in row
     assert "IN_FLIGHT" not in row
@@ -158,8 +158,15 @@ def test_a_stalled_job_is_not_rendered_as_work_in_progress() -> None:
 
 
 def test_an_unfinished_job_within_the_ceiling_still_reads_as_in_flight() -> None:
-    row = api._row({"repo": "a/b", "phase": "CLONING", "stalled": False})
+    row = api._row({"repo": "a/b", "phase": "CLONING", "state": "IN_FLIGHT"})
     assert "IN_FLIGHT" in row
+
+
+def test_a_job_nobody_has_started_reads_as_waiting_not_as_a_dropped_one() -> None:
+    """Forty queued jobs badged ABANDONED read as forty crashed workers."""
+    row = api._row({"repo": "a/b", "phase": "QUEUED", "state": "WAITING"})
+    assert "WAITING" in row
+    assert "ABANDONED" not in row
 
 
 def test_a_stalled_job_is_not_counted_as_a_repository_attempted(
@@ -170,7 +177,7 @@ def test_a_stalled_job_is_not_counted_as_a_repository_attempted(
     taking credit for a container that ran out of memory."""
     from datetime import UTC, datetime, timedelta
 
-    from nightshift_core.models import Outcome, RepoJob
+    from nightshift_core.models import Outcome, Phase, RepoJob
     from nightshift_core.store import ABANDONED_AFTER, MemoryJobStore
 
     store = MemoryJobStore()
@@ -181,6 +188,7 @@ def test_a_stalled_job_is_not_counted_as_a_repository_attempted(
             job_id="r:e/f",
             repo="e/f",
             updated_at=datetime.now(UTC) - ABANDONED_AFTER - timedelta(minutes=1),
+            phase=Phase.CLONING,
         )
     )
     monkeypatch.setattr(api, "get_store", lambda: store)
@@ -193,5 +201,7 @@ def test_a_stalled_job_is_not_counted_as_a_repository_attempted(
 
 def test_the_stalled_tile_is_not_a_quiet_one() -> None:
     """Muted says "nothing to see". Seventeen dropped jobs is something to see,
-    and it is usually a symptom of the infrastructure rather than the fleet."""
+    and it is usually a symptom of the infrastructure rather than the fleet. A
+    queue waiting for its next worker is the opposite: entirely ordinary."""
     assert api._OUTCOME_TONE["ABANDONED"] == "bad"
+    assert api._OUTCOME_TONE["WAITING"] == "muted"

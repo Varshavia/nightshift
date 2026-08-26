@@ -12,8 +12,8 @@ from nightshift_core.store import (
     JobStore,
     MemoryJobStore,
     document_id,
-    is_abandoned,
     outcome_counts,
+    unfinished_state,
 )
 
 
@@ -74,52 +74,68 @@ def test_an_identifier_with_no_slash_is_left_alone() -> None:
     assert document_id("run1") == "run1"
 
 
-def _stopped_at(age: timedelta, **kwargs: object) -> RepoJob:
+def _stopped_at(age: timedelta, *, repo: str = "a/b", **kwargs: object) -> RepoJob:
     return RepoJob(
-        job_id="run-1:a/b",
-        repo="a/b",
+        job_id=f"run-1:{repo}",
+        repo=repo,
         updated_at=datetime.now(UTC) - age,
         **kwargs,  # type: ignore[arg-type]
     )
 
 
-def test_a_job_nothing_is_working_on_stops_counting_as_in_flight() -> None:
+def test_a_job_a_worker_started_and_dropped_is_not_in_flight() -> None:
     """Seventeen repositories showed CLONING with no worker anywhere near them.
 
     Each was a record left behind by a container Cloud Run killed for using too
     much memory. Nothing writes to such a record again, so "in flight" is a
     claim about the present that stopped being true the moment the task died.
     """
-    assert is_abandoned(_stopped_at(ABANDONED_AFTER + timedelta(minutes=1), phase=Phase.CLONING))
+    stopped = _stopped_at(ABANDONED_AFTER + timedelta(minutes=1), phase=Phase.CLONING)
+    assert unfinished_state(stopped) == "ABANDONED"
+
+
+def test_a_job_nobody_has_picked_up_is_waiting_not_abandoned() -> None:
+    """Forty jobs sat at QUEUED because one worker was draining one at a time.
+
+    Calling those abandoned read as forty crashed workers. Nothing had crashed;
+    nothing had started. The two say different things to whoever is on call —
+    run more workers, or go find out what is killing them — so the dashboard
+    must not use one word for both.
+    """
+    queued = _stopped_at(ABANDONED_AFTER + timedelta(hours=6), phase=Phase.QUEUED)
+    assert unfinished_state(queued) == "WAITING"
 
 
 def test_a_job_still_within_the_ceiling_is_left_alone() -> None:
     """Building a large project legitimately takes a long time, and calling that
     abandoned sends someone hunting a bug that is not there."""
-    assert not is_abandoned(_stopped_at(timedelta(minutes=5), phase=Phase.CLONING))
+    assert unfinished_state(_stopped_at(timedelta(minutes=5), phase=Phase.CLONING)) == "IN_FLIGHT"
 
 
-def test_a_finished_job_is_never_abandoned_however_old() -> None:
+def test_a_finished_job_has_no_unfinished_state_however_old() -> None:
     """The record stops being written to precisely because it is done."""
-    job = _stopped_at(timedelta(days=30), outcome=Outcome.PATCHED_CLEAN)
-    assert not is_abandoned(job)
+    assert unfinished_state(_stopped_at(timedelta(days=30), outcome=Outcome.PATCHED_CLEAN)) is None
 
 
-def test_a_stalled_job_is_neither_in_flight_nor_an_outcome() -> None:
-    """Folding it into either number tells a different lie: busy, or finished."""
+def test_the_three_unfinished_states_are_counted_apart_from_the_outcomes() -> None:
+    """Folding any of them together tells a different lie: busy, or finished."""
     store = MemoryJobStore()
-    store.put(_stopped_at(ABANDONED_AFTER + timedelta(minutes=1)))
+    store.put(_stopped_at(ABANDONED_AFTER + timedelta(minutes=1), phase=Phase.CLONING))
+    store.put(_stopped_at(ABANDONED_AFTER + timedelta(hours=6), repo="g/h", phase=Phase.QUEUED))
     store.put(RepoJob(job_id="run-1:c/d", repo="c/d"))
     store.put(RepoJob(job_id="run-1:e/f", repo="e/f", outcome=Outcome.BASELINE_RED))
 
     counts = outcome_counts(store)
 
     assert counts["ABANDONED"] == 1
+    assert counts["WAITING"] == 1
     assert counts["IN_FLIGHT"] == 1
     assert counts["BASELINE_RED"] == 1
 
 
-def test_abandoned_is_not_smuggled_into_the_outcome_enum() -> None:
-    """ADR 0003: every member of Outcome describes a finished repair job, and an
-    abandoned job finished nothing. It is a fact about the clock, not a verdict."""
-    assert "ABANDONED" not in {str(outcome) for outcome in Outcome}
+def test_no_unfinished_state_is_smuggled_into_the_outcome_enum() -> None:
+    """ADR 0003: every member of Outcome describes a finished repair job, and
+    none of these finished anything. They are facts about the clock and the
+    queue, not verdicts."""
+    outcomes = {str(outcome) for outcome in Outcome}
+    assert not outcomes & {"ABANDONED", "WAITING", "IN_FLIGHT"}

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
-from nightshift_core.models import Outcome, RepoJob
+from nightshift_core.models import Outcome, Phase, RepoJob
 
 __all__ = [
     "Approval",
@@ -29,7 +29,7 @@ __all__ = [
     "MemoryApprovalStore",
     "MemoryJobStore",
     "document_id",
-    "is_abandoned",
+    "unfinished_state",
 ]
 
 _COLLECTION = "nightshift_jobs"
@@ -139,46 +139,56 @@ class FirestoreJobStore:
 ABANDONED_AFTER = timedelta(minutes=45)
 
 
-def is_abandoned(job: RepoJob, *, now: datetime | None = None) -> bool:
-    """A job with no outcome that nothing is working on any more.
+def unfinished_state(job: RepoJob, *, now: datetime | None = None) -> str | None:
+    """What to call a job that has not finished. ``None`` if it has.
 
-    Learned the hard way: a worker killed by Cloud Run's memory limit leaves its
-    record wherever it stood — ``phase=CLONING``, no outcome — and nothing ever
-    writes to it again. The dashboard read seventeen of those as repositories
-    currently being cloned. That is a false green of exactly the kind this
-    project exists to refuse; it merely happens to be about our own fleet rather
-    than about somebody else's test suite.
+    Three states, because they are three different problems:
+
+    ``IN_FLIGHT``  a worker is on it. The record was written recently enough
+                   that a live container is the only explanation.
+
+    ``WAITING``    published, and nothing has picked it up yet. Normal between
+                   nights, and a backlog when it is forty of them: the fix is
+                   more workers, not a debugger.
+
+    ``ABANDONED``  a worker started and died. The record stopped partway — the
+                   killed container's last checkpoint — and nothing will write
+                   to it again. This is the one that means something is wrong.
+
+    The distinction was learned twice over. First the dashboard called a
+    stalled job in flight, so the fleet looked busy while it was stuck. Then it
+    called every stalled job abandoned, which read as forty crashed workers when
+    thirty-eight of them were a queue nobody had drained. Both are the same
+    mistake: reporting a state the evidence does not support.
 
     Derived, never stored. The message is still on the queue, so a later worker
-    picks it up and moves the record on, and the job stops being abandoned
-    without anyone cleaning anything up. A stored flag would have to be written
-    back, and then the flag and the record could disagree.
+    moves the record on and the state corrects itself with nothing to clean up.
+    A stored flag would have to be written back, and then the flag and the
+    record could disagree about the same job.
     """
     if job.outcome is not None:
-        return False
-    return (now or datetime.now(UTC)) - job.updated_at > ABANDONED_AFTER
+        return None
+    if (now or datetime.now(UTC)) - job.updated_at <= ABANDONED_AFTER:
+        return "IN_FLIGHT"
+    return "WAITING" if job.phase is Phase.QUEUED else "ABANDONED"
 
 
 def outcome_counts(store: JobStore, *, run_id: str | None = None) -> dict[str, int]:
     """Nightly tally, for the dashboard and for the final numbers.
 
-    ``ABANDONED`` sits alongside the outcomes without being one. Every member of
-    ``Outcome`` describes a finished repair job (ADR 0003) and an abandoned job
-    finished nothing — but counting it as ``IN_FLIGHT`` says the fleet is busy
-    when it is stalled, and counting it as an outcome claims a result nobody
-    produced.
+    The three unfinished states sit alongside the outcomes without being any of
+    them. Every member of ``Outcome`` describes a finished repair job (ADR 0003)
+    and none of these finished anything — but folding them into ``IN_FLIGHT``
+    says the fleet is busy when it is stalled, and folding them into an outcome
+    claims a result nobody produced.
     """
     counts = {str(outcome): 0 for outcome in Outcome}
     counts["IN_FLIGHT"] = 0
+    counts["WAITING"] = 0
     counts["ABANDONED"] = 0
     now = datetime.now(UTC)
     for job in store.list_jobs(run_id=run_id):
-        if job.outcome:
-            counts[str(job.outcome)] += 1
-        elif is_abandoned(job, now=now):
-            counts["ABANDONED"] += 1
-        else:
-            counts["IN_FLIGHT"] += 1
+        counts[unfinished_state(job, now=now) or str(job.outcome)] += 1
     return counts
 
 
