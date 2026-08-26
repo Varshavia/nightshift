@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -28,13 +29,32 @@ from services.worker.tools import SandboxTools
 __all__ = [
     "REPAIR_INSTRUCTION",
     "GeminiRepairAgent",
+    "ModelUnreachable",
     "build_repair_agent",
+    "configure_backend",
     "final_text",
+    "proposal_from",
     "render_attempt_prompt",
     "total_tokens",
 ]
 
 log = logging.getLogger("nightshift.agent")
+
+
+class ModelUnreachable(RuntimeError):
+    """The attempt never happened: nothing answered.
+
+    Distinct from an attempt whose fix did not work, and the distinction is the
+    whole point. ADK reports a failed model call by logging it on a worker
+    thread and handing back an empty event stream, which is indistinguishable
+    from a model that answered with nothing — so the first real benchmark run
+    burned four attempts against absent credentials and reported
+    REPAIR_EXHAUSTED, a verdict meaning "the agent tried and could not fix it".
+    Nothing had tried. The giveaway was in the same line: zero tokens.
+
+    Raised rather than returned so it cannot be mistaken for a proposal, and so
+    the ceiling is never charged for work nobody did.
+    """
 
 #: Attempts on the cheap model before escalating. Two, because a second failure
 #: usually means the break is not the shape Flash is good at, and a third
@@ -224,16 +244,49 @@ class GeminiRepairAgent:
                 app_name=APP_NAME, user_id=AGENT_USER, session_id=session_id
             )
         )
-        events: Sequence[Any] = list(
-            runner.run(
-                user_id=AGENT_USER,
-                session_id=session_id,
-                new_message=types.Content(
-                    role="user", parts=[types.Part(text=render_attempt_prompt(context))]
-                ),
+        try:
+            events: Sequence[Any] = list(
+                runner.run(
+                    user_id=AGENT_USER,
+                    session_id=session_id,
+                    new_message=types.Content(
+                        role="user", parts=[types.Part(text=render_attempt_prompt(context))]
+                    ),
+                )
             )
+        except Exception as exc:  # the SDK's failures are not one exception type
+            raise ModelUnreachable(f"{type(exc).__name__}: {exc}"[:500]) from exc
+
+        return proposal_from(events)
+
+
+def proposal_from(events: Sequence[Any]) -> RepairProposal:
+    """One turn's events, read as an answer — or refused as none at all.
+
+    Neither an empty stream nor a stream with nothing in it is an answer.
+
+    Checking for no events was the obvious guard and it did not hold: ADK raises
+    the model error on its own thread and still yields events here, so the loop
+    received a proposal with no rationale and no tokens and counted it as an
+    attempt. Four of those became REPAIR_EXHAUSTED twice over — once against
+    absent credentials, once against a model name the project cannot serve.
+
+    Zero tokens is the signal that holds. A model that answered reports what the
+    answer cost, even when the answer is useless; a request that never reached
+    one reports nothing. Paired with an empty rationale it is not ambiguous, and
+    that pair is what the log showed both times.
+
+    Split out of ``attempt`` so this decision can be tested without ADK
+    installed, which is the whole seam the model call sits behind.
+    """
+    rationale = final_text(events)
+    tokens = total_tokens(events)
+    if not events or (tokens == 0 and not rationale.strip()):
+        raise ModelUnreachable(
+            "the model produced no answer and no token usage; "
+            "see the SDK error logged above"
         )
-        return RepairProposal(rationale=final_text(events), tokens_used=total_tokens(events))
+    return RepairProposal(rationale=rationale, tokens_used=tokens)
 
 
 def _session_id(context: RepairContext) -> str:
@@ -242,6 +295,37 @@ def _session_id(context: RepairContext) -> str:
     return f"{slug}-{context.attempt}"
 
 
+def configure_backend(settings: Settings) -> None:
+    """Point the SDK at the backend ``NIGHTSHIFT_MODEL_BACKEND`` names.
+
+    ADK and google-genai take this from the process environment, not from a
+    constructor argument, so a setting nobody translates is a setting that does
+    nothing. ``model_backend`` was exactly that: documented in ``.env.example``,
+    defaulted to ``vertex``, and read by no line of code — which would have sent
+    the first real repair attempt at the public Gemini API with no key, and
+    reported the failure as though the model had refused the work.
+
+    Anything already exported wins, so a developer pointing at the Gemini API
+    for an afternoon does not have to edit the project to do it. This is the
+    same rule ``load_env_file`` follows, for the same reason.
+    """
+    if settings.model_backend != "vertex":
+        return
+    for name, value in (
+        ("GOOGLE_GENAI_USE_VERTEXAI", "true"),
+        ("GOOGLE_CLOUD_PROJECT", settings.gcp_project),
+        # The model's location, not the fleet's. See Settings.model_location:
+        # Gemini 3.5 Flash is served on `global` and not in us-central1, and
+        # passing the compute region here turned that into a 404 that read like
+        # a permissions problem.
+        ("GOOGLE_CLOUD_LOCATION", settings.model_location),
+    ):
+        if value and not os.environ.get(name):
+            os.environ[name] = value
+
+
 def build_repair_agent(settings: Settings | None = None) -> GeminiRepairAgent:
     """Construct the agent that runs the repair loop."""
-    return GeminiRepairAgent(settings=settings or get_settings())
+    settings = settings or get_settings()
+    configure_backend(settings)
+    return GeminiRepairAgent(settings=settings)

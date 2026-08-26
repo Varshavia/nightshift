@@ -24,9 +24,11 @@ fleet for free before a token is spent.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 from nightshift_core import telemetry
 from nightshift_core.config import Settings, get_settings
@@ -39,9 +41,9 @@ from nightshift_core.ledger import (
 )
 from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
-from nightshift_core.store import JobStore
-from services.worker.agent import build_repair_agent
-from services.worker.librarian import Librarian, shelve_repair
+from nightshift_core.store import FirestoreJobStore, JobStore
+from services.worker.agent import ModelUnreachable, build_repair_agent
+from services.worker.librarian import Librarian, build_librarian, shelve_repair
 from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
@@ -151,6 +153,12 @@ def open_pull_request(
         client,
         baseline_green=bool(job.baseline_green),
         model=settings.repair_model,
+    )
+
+
+def _job_store(settings: Settings) -> JobStore:
+    return FirestoreJobStore(
+        project=settings.gcp_project, database=settings.firestore_database
     )
 
 
@@ -274,9 +282,17 @@ def _run(
         # Built here rather than at the top of ``handle``: a PATCHED_CLEAN job
         # never reaches this line, and it should never pay to construct an agent
         # it will not use.
-        repaired = repair(
-            job, sandbox, verified, policy, budget, build_repair_agent(settings), recipe=recipe
-        )
+        try:
+            repaired = repair(
+                job, sandbox, verified, policy, budget, build_repair_agent(settings), recipe=recipe
+            )
+        except ModelUnreachable as exc:
+            # Not REPAIR_EXHAUSTED. That outcome means the agent tried and could
+            # not fix it, and it is the number the project publishes; awarding it
+            # to a job where no model was ever reached would put failures in the
+            # denominator that nobody attempted. The first benchmark run did
+            # exactly that against absent credentials.
+            return finish(Outcome.INFRA_ERROR, notes=f"model unreachable: {exc}"[:500])
         if not repaired:
             record_in_ledger(job, ledger, retrieval, Outcome.REPAIR_EXHAUSTED)
             return finish(
@@ -307,5 +323,146 @@ def _run(
     return finish(outcome, pr_url=pr_url)
 
 
+# --------------------------------------------------------------------------- #
+# Consuming
+# --------------------------------------------------------------------------- #
+#
+# A Cloud Run Job that drains a bounded number of messages and exits, rather
+# than a service holding a subscription open. Two reasons, both about the shape
+# of the work: a repair runs for up to half an hour, which no push subscription
+# will wait for, and a job that exits releases its container instead of paying
+# to idle between nights.
+#
+# The streaming pull client is used rather than a synchronous pull because it
+# extends the acknowledgement lease while the callback is still working. A
+# synchronous pull would have to renew the lease by hand, and forgetting to
+# would hand the same repository to a second worker halfway through the first
+# one's repair.
+
+
+def _librarian(settings: Settings) -> Librarian | None:
+    """The Librarian, when the fleet can reach one.
+
+    ``None`` is a degradation and not a failure, which is why this returns
+    rather than raises: a worker that cannot generalise its repairs should still
+    make them. Losing the write path costs the fleet tomorrow's shortcut; losing
+    the repair costs it tonight's pull request, and only one of those is worth
+    failing a job over.
+
+    Built per message rather than per process because it is cheap and because a
+    long-lived worker should pick up a credential that arrives late.
+    """
+    try:
+        return build_librarian(settings)
+    except Exception:
+        log.warning("no librarian available; repairs will not be generalised", exc_info=True)
+        return None
+
+
+def on_message(message: Any, store: JobStore, settings: Settings) -> RepoJob | None:
+    """Decide what happens to one message. The whole of the queueing policy.
+
+    Lifted out of the subscriber callback so it can be exercised without a live
+    subscription: whether a message comes back is the only decision here worth
+    getting wrong, and it should not be reachable only through a client.
+
+    A message is acknowledged when the job reaches a terminal outcome, including
+    the unhappy ones. ``UNBUILDABLE`` is an answer, and redelivering it buys
+    another fifteen minutes of the same conclusion — a queue slowly filling with
+    repositories we already know we cannot help. ``INFRA_ERROR`` is the one
+    member of ``Outcome`` that is about us rather than about the repository, so
+    that one goes back.
+    """
+    try:
+        job = RepoJob.from_dict(json.loads(message.data.decode("utf-8")))
+    except (ValueError, KeyError, TypeError) as exc:
+        # Undeliverable to anyone, so returning it only moves the problem
+        # around. The subscription's dead-letter policy is where a message like
+        # this belongs, and acknowledging is what sends it there.
+        log.error("discarding an unreadable message: %s", exc)
+        message.ack()
+        return None
+
+    log.info("picked up %s", job.repo)
+    try:
+        result = handle(job, store, settings, librarian=_librarian(settings))
+    except Exception:
+        log.exception("%s failed outside a terminal outcome; returning it", job.repo)
+        message.nack()
+        return None
+
+    if result.outcome is Outcome.INFRA_ERROR:
+        log.warning("%s ended in INFRA_ERROR; returning it to the queue", job.repo)
+        message.nack()
+    else:
+        message.ack()
+    return result
+
+
+def consume(
+    settings: Settings | None = None,
+    store: JobStore | None = None,
+    *,
+    max_jobs: int = 1,
+    idle_timeout: float = 60.0,
+) -> list[RepoJob]:
+    """Take work off the queue until there is none, or until the ceiling.
+
+    A Cloud Run Job that drains a bounded number of messages and exits, rather
+    than a service holding a subscription open. Two reasons, both about the
+    shape of the work: a repair runs for up to half an hour, which no push
+    subscription will wait for, and a job that exits releases its container
+    instead of paying to idle between nights.
+
+    ``max_jobs`` is one by default because a worker is sized for a repository,
+    not for a night: each job builds an environment, runs a suite twice and may
+    call a model, and running two of those in one container makes the wall-clock
+    ceiling meaningless. Fan-out is Cloud Run's business — ``--tasks N`` — not
+    ours.
+
+    The streaming pull client is used rather than a synchronous pull because it
+    extends the acknowledgement lease while the callback is still working.
+    Renewing that by hand and forgetting to would hand the same repository to a
+    second worker halfway through the first one's repair.
+    """
+    from google.cloud import pubsub_v1
+
+    settings = settings or get_settings()
+    settings.require_cloud()
+    store = store if store is not None else _job_store(settings)
+
+    subscriber = pubsub_v1.SubscriberClient()
+    path = subscriber.subscription_path(settings.gcp_project, settings.jobs_subscription)
+    done: list[RepoJob] = []
+
+    def callback(message: Any) -> None:
+        result = on_message(message, store, settings)
+        if result is not None:
+            done.append(result)
+
+    future = subscriber.subscribe(
+        path,
+        callback=callback,
+        flow_control=pubsub_v1.types.FlowControl(max_messages=max_jobs),
+    )
+    log.info("listening on %s for at most %d job(s)", path, max_jobs)
+    try:
+        while len(done) < max_jobs:
+            try:
+                future.result(timeout=idle_timeout)
+            except TimeoutError:
+                if not done:
+                    # An empty queue is the normal state of a fleet between
+                    # nights, not a failure.
+                    log.info("no work on the queue")
+                break
+    finally:
+        future.cancel()
+        subscriber.close()
+    return done
+
+
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit("the worker is driven by Pub/Sub; use `make run-local REPO=owner/name`")
+    logging.basicConfig(level=logging.INFO)
+    for finished in consume():
+        print(finished.repo, finished.outcome)

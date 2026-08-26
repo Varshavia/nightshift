@@ -16,6 +16,7 @@ import pytest
 from scripts.build_fork_pool import assess
 
 from nightshift_core.github import (
+    BadCredential,
     GitHubClient,
     GitHubError,
     RateLimited,
@@ -460,3 +461,33 @@ def test_whoami_says_what_is_missing_when_it_cannot_ask() -> None:
 
     with pytest.raises(GitHubError, match="token"):
         _client(handler).whoami()
+
+
+def test_a_rejected_token_stops_the_run_rather_than_the_repository() -> None:
+    """401 is about the credential, not about the repository that named it.
+
+    A scan that skips each repository in turn on a 401 surveys nothing and
+    reports that it found nothing wrong — twenty-four skips and a clean exit,
+    which is the exact shape of failure this project refuses to have. It cost a
+    real scan: every repository in the pool failed identically on a read token
+    that Secret Manager was holding in a form GitHub would not accept.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Bad credentials"})
+
+    with pytest.raises(BadCredential) as caught:
+        _client(handler).get_file("org/repo", "requirements.txt")
+
+    # The message has to say what to check. A 401 with no next step is how an
+    # hour goes into re-reading code that was never wrong.
+    assert "gcloud secrets versions access" in str(caught.value)
+
+
+def test_a_missing_file_is_still_just_a_missing_file() -> None:
+    """404 means the manifest is not there, which is the normal case."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Not Found"})
+
+    assert _client(handler).get_file("org/repo", "requirements/test.txt") is None

@@ -169,3 +169,90 @@ def test_a_service_that_opens_pull_requests_must_know_where_they_go() -> None:
         Settings(gcp_project="", fork_org="Varshavia").require_cloud()
 
     Settings(gcp_project="p", fork_org="Varshavia").require_cloud()
+
+
+def test_the_model_backend_setting_actually_routes_the_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A setting nobody reads is a setting that does nothing.
+
+    ``NIGHTSHIFT_MODEL_BACKEND`` was documented in ``.env.example``, defaulted to
+    ``vertex``, and consumed by no line of code. ADK takes the backend from the
+    process environment, so the first real repair attempt would have gone to the
+    public Gemini API with no key — and the failure would have looked like the
+    model refusing the work rather than like a wiring bug.
+    """
+    from services.worker.agent import configure_backend
+
+    for name in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+        monkeypatch.delenv(name, raising=False)
+
+    configure_backend(Settings(gcp_project="nightshift-506519", gcp_region="us-central1"))
+
+    assert os.environ["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
+    assert os.environ["GOOGLE_CLOUD_PROJECT"] == "nightshift-506519"
+    # Where the model is served, not where the fleet runs.
+    assert os.environ["GOOGLE_CLOUD_LOCATION"] == "global"
+
+
+def test_an_explicit_backend_choice_in_the_environment_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same rule as the dotenv reader: what is already set outranks the default.
+
+    Someone pointing at the Gemini API for an afternoon should not have to edit
+    the project to do it.
+    """
+    from services.worker.agent import configure_backend
+
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "false")
+    configure_backend(Settings(gcp_project="p", gcp_region="us-central1"))
+
+    assert os.environ["GOOGLE_GENAI_USE_VERTEXAI"] == "false"
+
+
+def test_a_non_vertex_backend_sets_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Choosing the Gemini API and being handed Vertex anyway is the bug this
+    whole function exists to prevent, arrived at from the other side."""
+    from services.worker.agent import configure_backend
+
+    monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+    configure_backend(Settings(gcp_project="p", model_backend="api"))
+
+    assert "GOOGLE_GENAI_USE_VERTEXAI" not in os.environ
+
+
+def test_the_model_is_looked_for_where_it_is_served_not_where_we_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vertex serves new Gemini versions on `global` before any named region.
+
+    Passing the compute region to the SDK sent every repair attempt to
+    us-central1 and came back 404: the model "was not found or your project does
+    not have access to it". That sentence reads like an entitlement problem and
+    was a geography one — the same model answered on `global` immediately.
+    """
+    from services.worker.agent import configure_backend
+
+    for name in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+        monkeypatch.delenv(name, raising=False)
+
+    configure_backend(Settings(gcp_project="p", gcp_region="europe-west4"))
+
+    assert os.environ["GOOGLE_CLOUD_LOCATION"] == "global"
+
+
+def test_the_model_location_is_configurable_for_when_it_moves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`global` is today's answer, not a permanent one — models land in named
+    regions later, and a project may be told to use one."""
+    for name in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NIGHTSHIFT_MODEL_LOCATION", "us-central1")
+
+    from services.worker.agent import configure_backend
+
+    configure_backend(get_settings())
+
+    assert os.environ["GOOGLE_CLOUD_LOCATION"] == "us-central1"

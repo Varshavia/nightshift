@@ -7,6 +7,7 @@ they are exercised.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -191,3 +192,151 @@ def test_every_phase_is_checkpointed(patched: pytest.MonkeyPatch) -> None:
     job = run(store)
     assert store.get(job.job_id) is not None
     assert store.get(job.job_id).outcome is Outcome.PATCHED_CLEAN  # type: ignore[union-attr]
+
+
+class _Message:
+    """The two methods the consumer is allowed to call on a Pub/Sub message."""
+
+    def __init__(self, job: RepoJob | None = None, raw: bytes | None = None) -> None:
+        self.data = raw if raw is not None else json.dumps(job.to_dict()).encode()  # type: ignore[union-attr]
+        self.acked = False
+        self.nacked = False
+
+    def ack(self) -> None:
+        self.acked = True
+
+    def nack(self) -> None:
+        self.nacked = True
+
+
+def _drain(
+    monkeypatch: pytest.MonkeyPatch, message: _Message, finished: RepoJob | None
+) -> None:
+    """Run the queueing decision against one message.
+
+    `on_message` is a module-level function precisely so this needs no live
+    subscription: whether a message comes back is the only decision here worth
+    getting wrong, and a test that could only reach it through a Pub/Sub client
+    would not be run.
+    """
+    def fake_handle(job: RepoJob, store: object, settings: object, **kwargs: object) -> RepoJob:
+        assert finished is not None
+        return finished
+
+    monkeypatch.setattr(worker, "handle", fake_handle)
+    worker.on_message(message, MemoryJobStore(), Settings(gcp_project="p", fork_org="org"))
+
+
+
+def test_a_terminal_outcome_is_acknowledged_even_when_it_is_a_bad_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UNBUILDABLE is an answer. Redelivering it buys another fifteen minutes
+    of the same, and the message would circulate until the retention window
+    ended — which is a queue slowly filling with repositories we already know
+    we cannot help."""
+    message = _Message(RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[]))
+    finished = RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[])
+    finished.finish(Outcome.UNBUILDABLE)
+
+    _drain(monkeypatch, message, finished)
+
+    assert message.acked and not message.nacked
+
+
+def test_our_own_failure_goes_back_on_the_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """INFRA_ERROR is the one member of Outcome that is about us.
+
+    Acknowledging it would throw away a repository for a reason that had nothing
+    to do with the repository.
+    """
+    message = _Message(RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[]))
+    finished = RepoJob(job_id="r1:org/app", repo="org/app", vulnerabilities=[])
+    finished.finish(Outcome.INFRA_ERROR)
+
+    _drain(monkeypatch, message, finished)
+
+    assert message.nacked and not message.acked
+
+
+def test_an_unreadable_message_is_not_redelivered_forever(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It cannot be delivered to anyone, so returning it only moves the problem."""
+    message = _Message(None, raw=b"{not json")
+
+    _drain(monkeypatch, message, None)
+
+    assert message.acked
+
+
+def test_a_model_nobody_could_reach_is_not_a_failed_repair(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """The first benchmark run reported REPAIR_EXHAUSTED having called nothing.
+
+    Application Default Credentials were absent, ADK logged the failure on a
+    worker thread and handed back an empty event stream four times, and the loop
+    charged four attempts for work nobody did. REPAIR_EXHAUSTED means the agent
+    tried and could not fix it — it is the denominator of the number this
+    project publishes — so awarding it here inflates the failures with jobs that
+    were never attempted. The tell was in the same log line: zero tokens.
+    """
+    from services.worker.agent import ModelUnreachable
+
+    patch_suite(patched, [True, False])
+
+    def unreachable(settings: Settings) -> object:
+        class Agent:
+            def attempt(self, context: object, tools: object) -> RepairProposal:
+                raise ModelUnreachable("DefaultCredentialsError: no ADC")
+
+        return Agent()
+
+    patched.setattr(worker, "build_repair_agent", unreachable)
+
+    finished = run()
+
+    assert finished.outcome is Outcome.INFRA_ERROR
+    assert "model unreachable" in finished.notes
+    assert finished.repair_attempts == [], "an attempt nobody made is not an attempt"
+
+
+def test_a_real_failed_repair_is_still_repair_exhausted(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """The other half: an agent that answers and gets it wrong must still count.
+
+    Routing genuine failures to INFRA_ERROR would flatter the repair rate by
+    quietly dropping every case the agent lost.
+    """
+    patch_suite(patched, [True, False, False, False, False, False, False, False])
+
+    def wrong(settings: Settings) -> object:
+        class Agent:
+            def attempt(self, context: object, tools: object) -> RepairProposal:
+                return RepairProposal(rationale="tried renaming the import", tokens_used=1200)
+
+        return Agent()
+
+    patched.setattr(worker, "build_repair_agent", wrong)
+
+    finished = run()
+
+    assert finished.outcome is Outcome.REPAIR_EXHAUSTED
+    assert finished.tokens_used > 0, "a real exhaustion cannot cost nothing"
+
+
+def test_a_worker_that_cannot_reach_a_librarian_still_repairs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Losing the write path costs the fleet tomorrow's shortcut. Losing the
+    repair costs it tonight's pull request, and only one of those is worth
+    failing a job over — so a Librarian that cannot be built is None, not a
+    raise."""
+    def refuse(settings: Settings) -> object:
+        raise RuntimeError("no ADK installed")
+
+    monkeypatch.setattr(worker, "build_librarian", refuse)
+
+    assert worker._librarian(SETTINGS) is None

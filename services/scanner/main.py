@@ -33,6 +33,7 @@ from nightshift_core.github import GitHubClient
 from nightshift_core.manifests import RECOGNISED_MANIFESTS, parse_manifest
 from nightshift_core.models import Dependency, RepoJob, Severity, Vulnerability
 from nightshift_core.osv import OSVClient
+from nightshift_core.store import FirestoreJobStore, JobStore
 
 log = logging.getLogger("nightshift.scanner")
 
@@ -48,6 +49,9 @@ class ScanResult:
     repos_scanned: int
     dependencies_seen: int
     jobs_published: int
+    #: Repositories the scan could not read. Named rather than counted, because
+    #: the useful question the next morning is which ones.
+    skipped: tuple[str, ...] = ()
 
 
 def load_fleet(settings: Settings) -> Sequence[str]:
@@ -120,6 +124,12 @@ def triage(vulnerabilities: Sequence[Vulnerability]) -> Sequence[Vulnerability]:
     ]
 
 
+def _job_store(settings: Settings) -> JobStore:
+    return FirestoreJobStore(
+        project=settings.gcp_project, database=settings.firestore_database
+    )
+
+
 @lru_cache(maxsize=1)
 def _publisher() -> Any:
     """One publisher for the process, built on first use.
@@ -168,16 +178,29 @@ def publish(job: RepoJob, settings: Settings, *, timeout: float = 30.0) -> str:
     return str(future.result(timeout=timeout))
 
 
-def scan(settings: Settings | None = None) -> ScanResult:
+def scan(settings: Settings | None = None, store: JobStore | None = None) -> ScanResult:
     """One nightly scan. The only function Cloud Run Jobs calls."""
     settings = settings or get_settings()
     settings.require_cloud()
+    store = store if store is not None else _job_store(settings)
     run_id = uuid.uuid4().hex[:12]
 
     repos = load_fleet(settings)
-    dependencies: dict[str, Sequence[Dependency]] = {
-        repo: read_manifests(repo) for repo in repos
-    }
+
+    # One repository's failure is not the night's. A scan reads from a service
+    # that rate-limits, times out and occasionally answers 500, and letting any
+    # of that end the run means the other twenty-three repositories go unscanned
+    # because the fourth one had a bad minute. What is skipped is counted and
+    # named, because a scan that quietly surveyed half the fleet and a scan that
+    # found nothing look identical in the morning.
+    dependencies: dict[str, Sequence[Dependency]] = {}
+    skipped: list[str] = []
+    for repo in repos:
+        try:
+            dependencies[repo] = read_manifests(repo)
+        except Exception as exc:
+            log.warning("skipping %s: %s", repo, exc)
+            skipped.append(repo)
 
     flat = [dep for deps in dependencies.values() for dep in deps]
     with OSVClient() as osv:
@@ -191,15 +214,27 @@ def scan(settings: Settings | None = None) -> ScanResult:
         if not hits:
             continue
         job = RepoJob(job_id=f"{run_id}:{repo}", repo=repo, vulnerabilities=list(hits))
+        # Recorded before it is published, and deliberately in that order. The
+        # dashboard reads Firestore, so a job that exists only as a Pub/Sub
+        # message is invisible until a worker happens to pick it up — a fleet
+        # that looks idle while it is in fact busy. Writing first also means a
+        # message can never arrive referring to a job nobody has heard of.
+        store.put(job)
         publish(job, settings)
         published += 1
 
-    log.info("run %s scanned %d repos, published %d jobs", run_id, len(repos), published)
+    if skipped:
+        log.warning("run %s could not read %d repositories: %s", run_id, len(skipped), skipped)
+    log.info(
+        "run %s scanned %d of %d repos, published %d jobs",
+        run_id, len(dependencies), len(repos), published,
+    )
     return ScanResult(
         run_id=run_id,
-        repos_scanned=len(repos),
+        repos_scanned=len(dependencies),
         dependencies_seen=len(flat),
         jobs_published=published,
+        skipped=tuple(skipped),
     )
 
 

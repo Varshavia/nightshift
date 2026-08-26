@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
-from nightshift_core.models import Outcome, RepoJob
+from nightshift_core.models import Outcome, Phase, RepoJob
 
 __all__ = [
     "Approval",
@@ -28,10 +28,31 @@ __all__ = [
     "JobStore",
     "MemoryApprovalStore",
     "MemoryJobStore",
+    "document_id",
+    "unfinished_state",
 ]
 
 _COLLECTION = "nightshift_jobs"
 _APPROVALS = "nightshift_approvals"
+
+
+def document_id(identifier: str) -> str:
+    """A Firestore document id built from something that may contain a slash.
+
+    Firestore reads ``/`` as a path separator, so ``run1:Varshavia/throttled``
+    is not a document id at all — it is three path elements, and the client
+    refuses it with "a document must have an even number of path elements".
+
+    This bit the job store on the first night anything actually wrote a job: the
+    identifier had contained a repository name since the first commit, and until
+    then every write had been to the in-memory store, where a slash is just a
+    character. The approvals store was written later and keyed by repository, so
+    the problem was obvious there and invisible here.
+
+    The identifier itself is unchanged in the document body. Only the key is
+    rewritten, so nothing downstream has to know this happened.
+    """
+    return identifier.replace("/", "__")
 
 
 @runtime_checkable
@@ -92,10 +113,10 @@ class FirestoreJobStore:
         return self._client
 
     def put(self, job: RepoJob) -> None:
-        self.client.collection(_COLLECTION).document(job.job_id).set(job.to_dict())
+        self.client.collection(_COLLECTION).document(document_id(job.job_id)).set(job.to_dict())
 
     def get(self, job_id: str) -> RepoJob | None:
-        snapshot = self.client.collection(_COLLECTION).document(job_id).get()
+        snapshot = self.client.collection(_COLLECTION).document(document_id(job_id)).get()
         if not snapshot.exists:
             return None
         return RepoJob.from_dict(snapshot.to_dict())
@@ -106,12 +127,68 @@ class FirestoreJobStore:
         return [RepoJob.from_dict(doc.to_dict()) for doc in query.stream()]
 
 
+#: How long a job may sit unfinished before we stop calling it in flight.
+#:
+#: Tied to the worker's `--task-timeout` in infra/deploy.sh: Cloud Run kills a
+#: task at thirty minutes, so a job whose record has not been touched since then
+#: is not being worked on by anything — its container is gone.
+#:
+#: The margin over that is deliberate. Being early here would report live work
+#: as abandoned, which is the more expensive mistake: it sends someone looking
+#: for a bug in a worker that is simply still building a large project.
+ABANDONED_AFTER = timedelta(minutes=45)
+
+
+def unfinished_state(job: RepoJob, *, now: datetime | None = None) -> str | None:
+    """What to call a job that has not finished. ``None`` if it has.
+
+    Three states, because they are three different problems:
+
+    ``IN_FLIGHT``  a worker is on it. The record was written recently enough
+                   that a live container is the only explanation.
+
+    ``WAITING``    published, and nothing has picked it up yet. Normal between
+                   nights, and a backlog when it is forty of them: the fix is
+                   more workers, not a debugger.
+
+    ``ABANDONED``  a worker started and died. The record stopped partway — the
+                   killed container's last checkpoint — and nothing will write
+                   to it again. This is the one that means something is wrong.
+
+    The distinction was learned twice over. First the dashboard called a
+    stalled job in flight, so the fleet looked busy while it was stuck. Then it
+    called every stalled job abandoned, which read as forty crashed workers when
+    thirty-eight of them were a queue nobody had drained. Both are the same
+    mistake: reporting a state the evidence does not support.
+
+    Derived, never stored. The message is still on the queue, so a later worker
+    moves the record on and the state corrects itself with nothing to clean up.
+    A stored flag would have to be written back, and then the flag and the
+    record could disagree about the same job.
+    """
+    if job.outcome is not None:
+        return None
+    if (now or datetime.now(UTC)) - job.updated_at <= ABANDONED_AFTER:
+        return "IN_FLIGHT"
+    return "WAITING" if job.phase is Phase.QUEUED else "ABANDONED"
+
+
 def outcome_counts(store: JobStore, *, run_id: str | None = None) -> dict[str, int]:
-    """Nightly tally, for the dashboard and for the final numbers."""
+    """Nightly tally, for the dashboard and for the final numbers.
+
+    The three unfinished states sit alongside the outcomes without being any of
+    them. Every member of ``Outcome`` describes a finished repair job (ADR 0003)
+    and none of these finished anything — but folding them into ``IN_FLIGHT``
+    says the fleet is busy when it is stalled, and folding them into an outcome
+    claims a result nobody produced.
+    """
     counts = {str(outcome): 0 for outcome in Outcome}
     counts["IN_FLIGHT"] = 0
+    counts["WAITING"] = 0
+    counts["ABANDONED"] = 0
+    now = datetime.now(UTC)
     for job in store.list_jobs(run_id=run_id):
-        counts[str(job.outcome) if job.outcome else "IN_FLIGHT"] += 1
+        counts[unfinished_state(job, now=now) or str(job.outcome)] += 1
     return counts
 
 
@@ -217,20 +294,16 @@ class FirestoreApprovalStore:
             self._client = firestore.Client(project=self._project, database=self._database)
         return self._client
 
-    @staticmethod
-    def _document_id(repo: str) -> str:
-        return repo.replace("/", "__")
-
     def approve(self, approval: Approval) -> None:
-        self.client.collection(_APPROVALS).document(self._document_id(approval.repo)).set(
+        self.client.collection(_APPROVALS).document(document_id(approval.repo)).set(
             approval.to_dict()
         )
 
     def revoke(self, repo: str) -> None:
-        self.client.collection(_APPROVALS).document(self._document_id(repo)).delete()
+        self.client.collection(_APPROVALS).document(document_id(repo)).delete()
 
     def approved(self, repo: str) -> Approval | None:
-        snapshot = self.client.collection(_APPROVALS).document(self._document_id(repo)).get()
+        snapshot = self.client.collection(_APPROVALS).document(document_id(repo)).get()
         if not snapshot.exists:
             return None
         return Approval.from_dict(snapshot.to_dict())

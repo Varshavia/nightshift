@@ -10,9 +10,51 @@
 #
 set -euo pipefail
 
+# Git Bash on Windows rewrites anything in an argument that looks like a POSIX
+# path into a Windows one before the command ever runs. `/workspace` became
+# `C:/Program Files/Git/workspace`, which gcloud accepted without comment and
+# Cloud Run then handed to a Linux container, where the worker tried to mkdir a
+# drive letter and every job in the queue failed on it.
+#
+# Turning the conversion off is the obvious fix and it is worse than the bug:
+# gcloud on Windows is a Python script behind a bash wrapper that passes its own
+# `/c/Users/...` path back through the very conversion we would be disabling, so
+# `MSYS_NO_PATHCONV=1` stops the deployment at the first gcloud call with a
+# mangled `C:\c\Users\...`. The environment is not ours to reconfigure.
+#
+# So this script passes no absolute POSIX path at all. The workspace root is set
+# in services/worker/Dockerfile, where it belongs anyway: it names a directory
+# that exists inside the image, created and chowned there, and nothing outside
+# the image gets a say in where it is.
+
+# The same `.env` the services read, under the same rule: a variable that is
+# already set wins, and the file only fills gaps. Without this a fresh terminal
+# is a fresh deployment failure — `set NIGHTSHIFT_GCP_PROJECT` — and the answer
+# on offer is to paste exports, which is how a project id and a fork
+# organisation end up in shell history, in a screenshot, and eventually wrong.
+# The values are configuration, not secrets, and they are already written down
+# one directory up; the script should read them rather than ask.
+#
+# Deliberately not `source`: a dotenv file is data, and sourcing it would run
+# whatever a stray backtick in it happened to say.
+env_file="$(dirname "$0")/../.env"
+if [[ -f "$env_file" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"                      # the file is edited on Windows
+    line="${line#export }"
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    name="${line%%=*}"
+    value="${line#*=}"
+    [[ "$value" == \"*\" || "$value" == \'*\' ]] && value="${value:1:${#value}-2}"
+    [[ -n "${!name:-}" ]] || export "$name=$value"
+  done < "$env_file"
+fi
+
 PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
 TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"
+SUBSCRIPTION="${NIGHTSHIFT_JOBS_SUBSCRIPTION:-nightshift-jobs-workers}"
 REPO="nightshift"
 TARGET="${1:-all}"
 
@@ -22,6 +64,7 @@ TARGET="${1:-all}"
 FLEET_POOL="${NIGHTSHIFT_FLEET_POOL:-fleet/pool.json}"
 REPAIR_MODEL="${NIGHTSHIFT_REPAIR_MODEL:-gemini-3.5-flash}"
 ESCALATION_MODEL="${NIGHTSHIFT_ESCALATION_MODEL:-gemini-3.5-pro}"
+MODEL_LOCATION="${NIGHTSHIFT_MODEL_LOCATION:-global}"
 FORK_ORG="${NIGHTSHIFT_FORK_ORG:?set NIGHTSHIFT_FORK_ORG — the fleet never operates outside it}"
 
 say() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
@@ -54,11 +97,35 @@ create_sa() {
   fi
 }
 
+# The project's IAM policy, read once. Every `add-iam-policy-binding` is a
+# read-modify-write of the whole policy with its own retry loop on etag
+# conflicts, and this script has sixteen of them. Re-applying bindings that
+# already exist turned each deployment into several minutes of watching
+# "Updated IAM policy" scroll past — long enough that the first person to see it
+# reasonably concluded the script had hung.
+POLICY="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
+
 grant() {
   local name="$1" role="$2"
+  local member="serviceAccount:${name}@${PROJECT}.iam.gserviceaccount.com"
+
+  # Already there? Then there is nothing to say. Checked against the snapshot
+  # rather than re-fetched, because the whole point is to avoid the round trip.
+  if printf '%s' "$POLICY" | python -c "
+import json, sys
+policy = json.load(sys.stdin)
+role, member = sys.argv[1], sys.argv[2]
+bindings = [b for b in policy.get('bindings', []) if b.get('role') == role]
+sys.exit(0 if any(member in b.get('members', []) for b in bindings) else 1)
+" "$role" "$member"; then
+    return 0
+  fi
+
+  say "granting ${role} to ${name}"
   gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member "serviceAccount:${name}@${PROJECT}.iam.gserviceaccount.com" \
-    --role "$role" --condition=None --quiet >/dev/null
+    --member "$member" --role "$role" --condition=None --quiet >/dev/null
+  # Keep the snapshot in step so a repeated grant in the same run is a no-op.
+  POLICY="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
 }
 
 create_sa nightshift-scanner "Nightshift scanner"
@@ -192,6 +259,24 @@ if ! gcloud pubsub topics describe "$TOPIC" --project "$PROJECT" >/dev/null 2>&1
   gcloud pubsub topics create "$TOPIC" --project "$PROJECT"
 fi
 
+# A topic with no subscription discards everything published to it, silently and
+# by design. The scanner's first real run fanned out twenty-one jobs into
+# nothing at all and reported success, because publishing had genuinely
+# succeeded — there was simply nobody on the other end.
+#
+# The acknowledgement deadline is the maximum Pub/Sub allows. A repair can take
+# far longer than ten minutes, which the streaming pull client handles by
+# extending the lease while its callback is still working; the deadline here is
+# the ceiling on how long a *dead* worker holds a repository hostage before
+# somebody else may retry it.
+if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION" --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating Pub/Sub subscription ${SUBSCRIPTION}"
+  gcloud pubsub subscriptions create "$SUBSCRIPTION" \
+    --topic "$TOPIC" --project "$PROJECT" \
+    --ack-deadline 600 \
+    --message-retention-duration 7d
+fi
+
 if ! gcloud artifacts repositories describe "$REPO" \
     --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
   say "creating Artifact Registry repository"
@@ -241,6 +326,7 @@ build_and_push() {
 
 deploy_job() {
   local service="$1" sa="$2" timeout="$3" wants_token="${4:-no}"
+  local cpu="$5" memory="$6" tasks="${7:-1}"
 
   # The GitHub token is attached to the worker and to nothing else. The scanner
   # reads advisories and publishes messages; it has no use for a credential that
@@ -272,14 +358,42 @@ deploy_job() {
     --service-account "${sa}@${PROJECT}.iam.gserviceaccount.com" \
     --task-timeout "$timeout" \
     --max-retries 1 \
-    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_WORKSPACE_ROOT=/workspace@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
+    --cpu "$cpu" --memory "$memory" \
+    --tasks "$tasks" --parallelism "$tasks" \
+    --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_MODEL_LOCATION=${MODEL_LOCATION}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
 }
 
+# Sized from what each job actually does, not from Cloud Run's 512Mi default.
+#
+# The scanner reads two small files per repository and holds a list of pins in
+# memory; a gigabyte is already generous. The worker builds somebody else's
+# Python project from source — pip resolving forty pinned dependencies and
+# compiling wheels for lxml, mysqlclient and cryptography is the memory-hungriest
+# thing this fleet does, and at the default it was killed 97 seconds in, before
+# the first repository had finished installing. A job that dies mid-build reports
+# nothing about the repository it was building, which is the one outcome this
+# project refuses to produce.
+#
+# Four gigabytes was the first guess and it held for eighteen repositories out
+# of twenty. The two it did not hold for are the two the fleet most wants to
+# reach — `ralph` pins 427 dependencies and `LHM` pulls a machine-learning
+# stack — and a killed container says nothing about either. Memory is billed
+# while a task runs, so the ceiling costs nothing on the repositories that never
+# approach it and buys the ones that do.
+# The last number is tasks per execution, and it is where the fleet's fan-out
+# lives. A worker container takes exactly one repository off the queue by
+# design — it builds an environment, runs a suite twice and may call a model,
+# and a second job in the same container would make the wall-clock ceiling
+# meaningless. So "more at once" is Cloud Run's job, not the worker's, and one
+# execution of ten tasks is ten repositories rather than ten passes over one.
+#
+# The scanner stays at one. A scan is a single fan-out over the whole fleet;
+# running it twice in parallel would publish every job twice.
 case "$TARGET" in
-  scanner|all) deploy_job scanner nightshift-scanner 900s read ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s write ;;&
+  scanner|all) deploy_job scanner nightshift-scanner 900s read 1 1Gi 1 ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 8Gi 10 ;;&
   api|all)
     build_and_push api
     say "deploying api"

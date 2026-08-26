@@ -141,3 +141,67 @@ def test_a_deployment_with_no_key_configured_refuses_every_write(
         headers={"x-nightshift-approval-key": ""},
     )
     assert response.status_code == 403
+
+
+def test_a_stalled_job_is_not_rendered_as_work_in_progress() -> None:
+    """The page said CLONING about seventeen repositories nothing was cloning.
+
+    The phase is still true — it is where the job stopped — so it stays. What
+    was false was the badge beside it, which claimed the fleet was busy with
+    work its containers had already been killed for.
+    """
+    row = api._row({"repo": "a/b", "phase": "CLONING", "state": "ABANDONED"})
+
+    assert "ABANDONED" in row
+    assert "IN_FLIGHT" not in row
+    assert "CLONING" in row, "where it stopped is worth keeping"
+
+
+def test_an_unfinished_job_within_the_ceiling_still_reads_as_in_flight() -> None:
+    row = api._row({"repo": "a/b", "phase": "CLONING", "state": "IN_FLIGHT"})
+    assert "IN_FLIGHT" in row
+
+
+def test_a_job_nobody_has_started_reads_as_waiting_not_as_a_dropped_one() -> None:
+    """Forty queued jobs badged ABANDONED read as forty crashed workers."""
+    row = api._row({"repo": "a/b", "phase": "QUEUED", "state": "WAITING"})
+    assert "WAITING" in row
+    assert "ABANDONED" not in row
+
+
+def test_a_stalled_job_is_not_counted_as_a_repository_attempted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The headline number is how many repositories the fleet reached a verdict
+    on. A job whose worker was killed reached none, and counting it would be
+    taking credit for a container that ran out of memory."""
+    from datetime import UTC, datetime, timedelta
+
+    from nightshift_core.models import Outcome, Phase, RepoJob
+    from nightshift_core.store import ABANDONED_AFTER, MemoryJobStore
+
+    store = MemoryJobStore()
+    store.put(RepoJob(job_id="r:a/b", repo="a/b", outcome=Outcome.BASELINE_RED))
+    store.put(RepoJob(job_id="r:c/d", repo="c/d"))
+    store.put(
+        RepoJob(
+            job_id="r:e/f",
+            repo="e/f",
+            updated_at=datetime.now(UTC) - ABANDONED_AFTER - timedelta(minutes=1),
+            phase=Phase.CLONING,
+        )
+    )
+    monkeypatch.setattr(api, "get_store", lambda: store)
+
+    summary = api.fleet_summary()
+
+    assert summary["counts"]["ABANDONED"] == 1
+    assert summary["attempted"] == 1, "one verdict reached, not three"
+
+
+def test_the_stalled_tile_is_not_a_quiet_one() -> None:
+    """Muted says "nothing to see". Seventeen dropped jobs is something to see,
+    and it is usually a symptom of the infrastructure rather than the fleet. A
+    queue waiting for its next worker is the opposite: entirely ordinary."""
+    assert api._OUTCOME_TONE["ABANDONED"] == "bad"
+    assert api._OUTCOME_TONE["WAITING"] == "muted"

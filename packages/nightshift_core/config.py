@@ -116,6 +116,11 @@ class Settings:
     gcp_project: str = ""
     gcp_region: str = "us-central1"
     jobs_topic: str = "nightshift-jobs"
+    #: The workers pull from this. Named separately from the topic because a
+    #: topic with no subscription silently discards everything published to
+    #: it — the scanner's first real run fanned out twenty-one jobs into a
+    #: void, and nothing anywhere reported a problem.
+    jobs_subscription: str = "nightshift-jobs-workers"
     firestore_database: str = "(default)"
     #: Where clones are built. ``/workspace`` in the container; a temp directory
     #: locally, because a laptop has no ``/workspace`` and should not need one.
@@ -128,6 +133,16 @@ class Settings:
     escalation_model: str = "gemini-3.5-pro"
     triage_model: str = "gemma-3-27b-it"
     model_backend: str = "vertex"
+    #: Where the models are served, which is not where the fleet runs.
+    #:
+    #: Vertex publishes the newest Gemini versions on the ``global`` endpoint
+    #: first and to named regions later, so reusing ``gcp_region`` here sent
+    #: every repair attempt to ``us-central1`` and collected a 404 saying the
+    #: model "was not found or your project does not have access to it" — a
+    #: sentence that reads like an entitlement problem and was a geography one.
+    #: Separate because the two answer different questions: one is where our
+    #: containers run, the other is where Google serves a model.
+    model_location: str = "global"
 
     fork_org: str = ""
     #: The reviewed list of repositories the fleet may touch. A path rather than
@@ -149,10 +164,14 @@ class Settings:
             gcp_project=_env("NIGHTSHIFT_GCP_PROJECT"),
             gcp_region=_env("NIGHTSHIFT_GCP_REGION", "us-central1"),
             jobs_topic=_env("NIGHTSHIFT_JOBS_TOPIC", "nightshift-jobs"),
+            jobs_subscription=_env(
+                "NIGHTSHIFT_JOBS_SUBSCRIPTION", "nightshift-jobs-workers"
+            ),
             firestore_database=_env("NIGHTSHIFT_FIRESTORE_DATABASE", "(default)"),
             workspace_root=_env("NIGHTSHIFT_WORKSPACE_ROOT", "/workspace"),
             repair_model=_env("NIGHTSHIFT_REPAIR_MODEL", "gemini-3.5-flash"),
             escalation_model=_env("NIGHTSHIFT_ESCALATION_MODEL", "gemini-3.5-pro"),
+            model_location=_env("NIGHTSHIFT_MODEL_LOCATION", "global"),
             triage_model=_env("NIGHTSHIFT_TRIAGE_MODEL", "gemma-3-27b-it"),
             model_backend=_env("NIGHTSHIFT_MODEL_BACKEND", "vertex"),
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),

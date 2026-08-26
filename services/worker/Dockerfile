@@ -44,5 +44,15 @@ COPY templates/ templates/
 # confined to /workspace by the policy engine as well as by the filesystem.
 RUN useradd --create-home --uid 1000 nightshift \
  && mkdir -p /workspace && chown nightshift:nightshift /workspace
+
+# Declared next to the directory it names, rather than passed by the deployment
+# script. `--set-env-vars NIGHTSHIFT_WORKSPACE_ROOT=/workspace` reached Cloud Run
+# as `C:/Program Files/Git/workspace`, because Git Bash rewrites POSIX-looking
+# arguments on the way out and gcloud has no reason to doubt what it is handed.
+# Every job then failed trying to mkdir a drive letter inside a Linux container.
+# A path that only means anything inside this image should be a fact of the
+# image, where no shell on anybody's laptop gets a vote.
+ENV NIGHTSHIFT_WORKSPACE_ROOT=/workspace
+
 USER nightshift
 ENTRYPOINT ["python", "-m", "services.worker.main"]

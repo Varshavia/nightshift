@@ -21,6 +21,7 @@ from nightshift_core.store import (
     FirestoreJobStore,
     JobStore,
     outcome_counts,
+    unfinished_state,
 )
 
 log = logging.getLogger("nightshift.api")
@@ -39,7 +40,11 @@ def fleet_summary(run_id: str | None = None) -> dict[str, Any]:
     """Outcome counts for a run. The number the whole project reports."""
     store = get_store()
     counts = outcome_counts(store, run_id=run_id)
-    attempted = sum(v for k, v in counts.items() if k != "IN_FLIGHT")
+    # None of the three unfinished states was attempted. Counting them would say
+    # the fleet had reached a verdict on repositories it never finished cloning
+    # — or in most cases never started.
+    unfinished = {"IN_FLIGHT", "WAITING", "ABANDONED"}
+    attempted = sum(v for k, v in counts.items() if k not in unfinished)
     repaired = counts["PATCHED_REPAIRED"]
     broke = repaired + counts["REPAIR_EXHAUSTED"]
     return {
@@ -53,7 +58,20 @@ def fleet_summary(run_id: str | None = None) -> dict[str, Any]:
 
 
 def list_jobs(run_id: str | None = None) -> list[dict[str, Any]]:
-    return [job.to_dict() for job in get_store().list_jobs(run_id=run_id)]
+    """Stored records, each carrying whether anything is still working on it.
+
+    ``state`` is added here rather than stored, because it is a fact about the
+    clock rather than about the job: the same record is in flight at minute ten
+    and stalled at minute fifty without anybody writing to it. Adding it at the
+    edge keeps that derivation in one place, and means the JSON and the HTML
+    cannot come to different conclusions about the same record.
+    """
+    jobs = []
+    for job in get_store().list_jobs(run_id=run_id):
+        record = job.to_dict()
+        record["state"] = unfinished_state(job)
+        jobs.append(record)
+    return jobs
 
 
 #: Outcomes get a colour so a night can be read at a glance rather than
@@ -69,6 +87,12 @@ _OUTCOME_TONE = {
     "POLICY_BLOCKED": "warn",
     "INFRA_ERROR": "bad",
     "IN_FLIGHT": "muted",
+    # A queue nobody has drained yet is normal between nights; a job a worker
+    # started and dropped is not. Only the second one should catch the eye, and
+    # it earns the same colour as an infrastructure error because that is
+    # usually what caused it.
+    "WAITING": "muted",
+    "ABANDONED": "bad",
 }
 
 
@@ -110,7 +134,7 @@ def render_dashboard(summary: dict[str, Any], jobs: list[dict[str, Any]]) -> str
 
 
 def _row(job: dict[str, Any]) -> str:
-    outcome = str(job.get("outcome") or "IN_FLIGHT")
+    outcome = str(job.get("outcome") or job.get("state") or "IN_FLIGHT")
     tone = _OUTCOME_TONE.get(outcome, "muted")
     return (
         "<tr>"
