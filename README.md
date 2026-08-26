@@ -241,7 +241,7 @@ services/scanner/           nightly scan, publishes jobs, then exits
 services/worker/            per-repo agents: toolchain · tools · repair · agent · pull_request
 services/api/               read model, approvals, and the control tower itself —
                             one server-rendered page, no build step, no chat UI
-scripts/                    fork pool construction, vetting, and the zero-token probe
+scripts/                    fork pool construction, the zero-token probe, benchmark runner
 benchmark/                  two-tier method: authored cases (A) and discovered ones (B)
 infra/deploy.sh             idempotent GCP deployment
 templates/pr_body.md        PR body, includes mandatory AI-authorship disclosure

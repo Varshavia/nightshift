@@ -17,6 +17,12 @@ out is three things we need before spending a cent of the cloud credit:
    upgrades, which is what tells us whether the credit stretches to the run we
    want to demonstrate.
 
+4. **Whether a fork is usable at all**, which used to be a second script. It
+   asked the same question with a smaller vocabulary — builds, suite green, how
+   long — and this file already answers it on the way past. Two implementations
+   of one measurement is how the fleet ended up with a worker and a probe that
+   disagreed about what a red baseline means, so the smaller one is gone.
+
 Usage::
 
     python scripts/probe_fleet.py --out benchmark/cases.json
