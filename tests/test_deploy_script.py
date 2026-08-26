@@ -165,6 +165,23 @@ def test_the_worker_is_given_more_memory_than_the_scanner() -> None:
     assert sizes["worker"] > sizes["scanner"]
 
 
+def test_the_fleet_fans_out_across_tasks_not_inside_a_container() -> None:
+    """A worker takes one repository by design, so ten at once means ten tasks.
+
+    Left at the default of one task, an execution drained a single job and the
+    other fifty-nine sat on the queue — a fleet in name only. The scanner stays
+    at one: a scan is a single fan-out, and two in parallel publish every job
+    twice.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert '--tasks "$tasks" --parallelism "$tasks"' in text
+    worker = re.search(r"deploy_job\s+worker\s+\S+\s+\S+\s+\S+\s+\d+\s+\S+\s+(\d+)", text)
+    scanner = re.search(r"deploy_job\s+scanner\s+\S+\s+\S+\s+\S+\s+\d+\s+\S+\s+(\d+)", text)
+    assert worker is not None and scanner is not None
+    assert int(worker.group(1)) > 1, "one task per execution is not a fleet"
+    assert int(scanner.group(1)) == 1, "a second scanner would publish every job twice"
+
+
 def test_the_worker_image_declares_its_own_workspace_root() -> None:
     """The other half of the same fix: the value did not vanish, it moved."""
     dockerfile = DEPLOY.parent.parent / "services" / "worker" / "Dockerfile"

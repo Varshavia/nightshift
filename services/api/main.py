@@ -20,6 +20,7 @@ from nightshift_core.store import (
     FirestoreApprovalStore,
     FirestoreJobStore,
     JobStore,
+    is_abandoned,
     outcome_counts,
 )
 
@@ -39,7 +40,11 @@ def fleet_summary(run_id: str | None = None) -> dict[str, Any]:
     """Outcome counts for a run. The number the whole project reports."""
     store = get_store()
     counts = outcome_counts(store, run_id=run_id)
-    attempted = sum(v for k, v in counts.items() if k != "IN_FLIGHT")
+    # Neither an unfinished job nor a stalled one was attempted. Counting the
+    # stalled ones would make the fleet look busier than it is; counting them as
+    # attempts would make it look like it had reached a verdict on repositories
+    # it never finished cloning.
+    attempted = sum(v for k, v in counts.items() if k not in {"IN_FLIGHT", "ABANDONED"})
     repaired = counts["PATCHED_REPAIRED"]
     broke = repaired + counts["REPAIR_EXHAUSTED"]
     return {
@@ -53,7 +58,20 @@ def fleet_summary(run_id: str | None = None) -> dict[str, Any]:
 
 
 def list_jobs(run_id: str | None = None) -> list[dict[str, Any]]:
-    return [job.to_dict() for job in get_store().list_jobs(run_id=run_id)]
+    """Stored records, each carrying whether anything is still working on it.
+
+    ``stalled`` is added here rather than stored, because it is a fact about the
+    clock rather than about the job: the same record is in flight at minute ten
+    and stalled at minute fifty without anybody writing to it. Adding it at the
+    edge keeps that derivation in one place, and means the JSON and the HTML
+    cannot come to different conclusions about the same record.
+    """
+    jobs = []
+    for job in get_store().list_jobs(run_id=run_id):
+        record = job.to_dict()
+        record["stalled"] = is_abandoned(job)
+        jobs.append(record)
+    return jobs
 
 
 #: Outcomes get a colour so a night can be read at a glance rather than
@@ -69,6 +87,10 @@ _OUTCOME_TONE = {
     "POLICY_BLOCKED": "warn",
     "INFRA_ERROR": "bad",
     "IN_FLIGHT": "muted",
+    # Not muted. A stalled job is not a quiet one — it is work the fleet
+    # accepted and then dropped, and it should catch the eye the way an
+    # infrastructure error does, because that is usually what caused it.
+    "ABANDONED": "bad",
 }
 
 
@@ -110,7 +132,7 @@ def render_dashboard(summary: dict[str, Any], jobs: list[dict[str, Any]]) -> str
 
 
 def _row(job: dict[str, Any]) -> str:
-    outcome = str(job.get("outcome") or "IN_FLIGHT")
+    outcome = str(job.get("outcome") or _unfinished(job))
     tone = _OUTCOME_TONE.get(outcome, "muted")
     return (
         "<tr>"
@@ -121,6 +143,16 @@ def _row(job: dict[str, Any]) -> str:
         f"<td>{_pr_cell(job)}</td>"
         "</tr>"
     )
+
+
+def _unfinished(job: dict[str, Any]) -> str:
+    """What to call a job that has no outcome yet.
+
+    A record whose worker was killed keeps whatever phase it was in, so the page
+    said CLONING about seventeen repositories nothing was cloning. The phase is
+    still true — it is where the job stopped — but IN_FLIGHT beside it was not.
+    """
+    return "ABANDONED" if job.get("stalled") else "IN_FLIGHT"
 
 
 def _pr_cell(job: dict[str, Any]) -> str:

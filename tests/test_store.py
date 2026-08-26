@@ -3,12 +3,16 @@ CI: importing it must not require credentials."""
 
 from __future__ import annotations
 
-from nightshift_core.models import Outcome, RepoJob
+from datetime import UTC, datetime, timedelta
+
+from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.store import (
+    ABANDONED_AFTER,
     FirestoreJobStore,
     JobStore,
     MemoryJobStore,
     document_id,
+    is_abandoned,
     outcome_counts,
 )
 
@@ -68,3 +72,54 @@ def test_two_different_repositories_never_collide() -> None:
 
 def test_an_identifier_with_no_slash_is_left_alone() -> None:
     assert document_id("run1") == "run1"
+
+
+def _stopped_at(age: timedelta, **kwargs: object) -> RepoJob:
+    return RepoJob(
+        job_id="run-1:a/b",
+        repo="a/b",
+        updated_at=datetime.now(UTC) - age,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def test_a_job_nothing_is_working_on_stops_counting_as_in_flight() -> None:
+    """Seventeen repositories showed CLONING with no worker anywhere near them.
+
+    Each was a record left behind by a container Cloud Run killed for using too
+    much memory. Nothing writes to such a record again, so "in flight" is a
+    claim about the present that stopped being true the moment the task died.
+    """
+    assert is_abandoned(_stopped_at(ABANDONED_AFTER + timedelta(minutes=1), phase=Phase.CLONING))
+
+
+def test_a_job_still_within_the_ceiling_is_left_alone() -> None:
+    """Building a large project legitimately takes a long time, and calling that
+    abandoned sends someone hunting a bug that is not there."""
+    assert not is_abandoned(_stopped_at(timedelta(minutes=5), phase=Phase.CLONING))
+
+
+def test_a_finished_job_is_never_abandoned_however_old() -> None:
+    """The record stops being written to precisely because it is done."""
+    job = _stopped_at(timedelta(days=30), outcome=Outcome.PATCHED_CLEAN)
+    assert not is_abandoned(job)
+
+
+def test_a_stalled_job_is_neither_in_flight_nor_an_outcome() -> None:
+    """Folding it into either number tells a different lie: busy, or finished."""
+    store = MemoryJobStore()
+    store.put(_stopped_at(ABANDONED_AFTER + timedelta(minutes=1)))
+    store.put(RepoJob(job_id="run-1:c/d", repo="c/d"))
+    store.put(RepoJob(job_id="run-1:e/f", repo="e/f", outcome=Outcome.BASELINE_RED))
+
+    counts = outcome_counts(store)
+
+    assert counts["ABANDONED"] == 1
+    assert counts["IN_FLIGHT"] == 1
+    assert counts["BASELINE_RED"] == 1
+
+
+def test_abandoned_is_not_smuggled_into_the_outcome_enum() -> None:
+    """ADR 0003: every member of Outcome describes a finished repair job, and an
+    abandoned job finished nothing. It is a fact about the clock, not a verdict."""
+    assert "ABANDONED" not in {str(outcome) for outcome in Outcome}

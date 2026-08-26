@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
 from nightshift_core.models import Outcome, RepoJob
@@ -29,6 +29,7 @@ __all__ = [
     "MemoryApprovalStore",
     "MemoryJobStore",
     "document_id",
+    "is_abandoned",
 ]
 
 _COLLECTION = "nightshift_jobs"
@@ -126,12 +127,58 @@ class FirestoreJobStore:
         return [RepoJob.from_dict(doc.to_dict()) for doc in query.stream()]
 
 
+#: How long a job may sit unfinished before we stop calling it in flight.
+#:
+#: Tied to the worker's `--task-timeout` in infra/deploy.sh: Cloud Run kills a
+#: task at thirty minutes, so a job whose record has not been touched since then
+#: is not being worked on by anything — its container is gone.
+#:
+#: The margin over that is deliberate. Being early here would report live work
+#: as abandoned, which is the more expensive mistake: it sends someone looking
+#: for a bug in a worker that is simply still building a large project.
+ABANDONED_AFTER = timedelta(minutes=45)
+
+
+def is_abandoned(job: RepoJob, *, now: datetime | None = None) -> bool:
+    """A job with no outcome that nothing is working on any more.
+
+    Learned the hard way: a worker killed by Cloud Run's memory limit leaves its
+    record wherever it stood — ``phase=CLONING``, no outcome — and nothing ever
+    writes to it again. The dashboard read seventeen of those as repositories
+    currently being cloned. That is a false green of exactly the kind this
+    project exists to refuse; it merely happens to be about our own fleet rather
+    than about somebody else's test suite.
+
+    Derived, never stored. The message is still on the queue, so a later worker
+    picks it up and moves the record on, and the job stops being abandoned
+    without anyone cleaning anything up. A stored flag would have to be written
+    back, and then the flag and the record could disagree.
+    """
+    if job.outcome is not None:
+        return False
+    return (now or datetime.now(UTC)) - job.updated_at > ABANDONED_AFTER
+
+
 def outcome_counts(store: JobStore, *, run_id: str | None = None) -> dict[str, int]:
-    """Nightly tally, for the dashboard and for the final numbers."""
+    """Nightly tally, for the dashboard and for the final numbers.
+
+    ``ABANDONED`` sits alongside the outcomes without being one. Every member of
+    ``Outcome`` describes a finished repair job (ADR 0003) and an abandoned job
+    finished nothing — but counting it as ``IN_FLIGHT`` says the fleet is busy
+    when it is stalled, and counting it as an outcome claims a result nobody
+    produced.
+    """
     counts = {str(outcome): 0 for outcome in Outcome}
     counts["IN_FLIGHT"] = 0
+    counts["ABANDONED"] = 0
+    now = datetime.now(UTC)
     for job in store.list_jobs(run_id=run_id):
-        counts[str(job.outcome) if job.outcome else "IN_FLIGHT"] += 1
+        if job.outcome:
+            counts[str(job.outcome)] += 1
+        elif is_abandoned(job, now=now):
+            counts["ABANDONED"] += 1
+        else:
+            counts["IN_FLIGHT"] += 1
     return counts
 
 

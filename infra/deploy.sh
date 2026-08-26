@@ -325,7 +325,7 @@ build_and_push() {
 
 deploy_job() {
   local service="$1" sa="$2" timeout="$3" wants_token="${4:-no}"
-  local cpu="$5" memory="$6"
+  local cpu="$5" memory="$6" tasks="${7:-1}"
 
   # The GitHub token is attached to the worker and to nothing else. The scanner
   # reads advisories and publishes messages; it has no use for a credential that
@@ -358,6 +358,7 @@ deploy_job() {
     --task-timeout "$timeout" \
     --max-retries 1 \
     --cpu "$cpu" --memory "$memory" \
+    --tasks "$tasks" --parallelism "$tasks" \
     --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
@@ -373,9 +374,18 @@ deploy_job() {
 # the first repository had finished installing. A job that dies mid-build reports
 # nothing about the repository it was building, which is the one outcome this
 # project refuses to produce.
+# The last number is tasks per execution, and it is where the fleet's fan-out
+# lives. A worker container takes exactly one repository off the queue by
+# design — it builds an environment, runs a suite twice and may call a model,
+# and a second job in the same container would make the wall-clock ceiling
+# meaningless. So "more at once" is Cloud Run's job, not the worker's, and one
+# execution of ten tasks is ten repositories rather than ten passes over one.
+#
+# The scanner stays at one. A scan is a single fan-out over the whole fleet;
+# running it twice in parallel would publish every job twice.
 case "$TARGET" in
-  scanner|all) deploy_job scanner nightshift-scanner 900s read 1 1Gi ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 4Gi ;;&
+  scanner|all) deploy_job scanner nightshift-scanner 900s read 1 1Gi 1 ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 4Gi 10 ;;&
   api|all)
     build_and_push api
     say "deploying api"
