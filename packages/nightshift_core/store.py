@@ -123,7 +123,23 @@ class FirestoreJobStore:
 
     def list_jobs(self, *, run_id: str | None = None) -> list[RepoJob]:
         collection = self.client.collection(_COLLECTION)
-        query = collection if run_id is None else collection.where("run_id", "==", run_id)
+        # Filtered on the job id, not on a `run_id` field, because there is no
+        # such field: the run is the part of `job_id` before the colon, and the
+        # memory store has always known that. This one asked Firestore for a
+        # column nobody writes, so every filtered query came back empty and the
+        # dashboard could only ever show every night at once — two
+        # implementations of one protocol disagreeing about the data they share.
+        #
+        # A range over the prefix rather than reading the collection and
+        # discarding most of it: `\uffff` sorts above any character the id can
+        # contain, so the pair brackets exactly the ids that start `run_id:`.
+        query = (
+            collection
+            if run_id is None
+            else collection.where("job_id", ">=", f"{run_id}:").where(
+                "job_id", "<", f"{run_id}:\uffff"
+            )
+        )
         return [RepoJob.from_dict(doc.to_dict()) for doc in query.stream()]
 
 
