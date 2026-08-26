@@ -375,6 +375,13 @@ deploy_job() {
 # the first repository had finished installing. A job that dies mid-build reports
 # nothing about the repository it was building, which is the one outcome this
 # project refuses to produce.
+#
+# Four gigabytes was the first guess and it held for eighteen repositories out
+# of twenty. The two it did not hold for are the two the fleet most wants to
+# reach — `ralph` pins 427 dependencies and `LHM` pulls a machine-learning
+# stack — and a killed container says nothing about either. Memory is billed
+# while a task runs, so the ceiling costs nothing on the repositories that never
+# approach it and buys the ones that do.
 # The last number is tasks per execution, and it is where the fleet's fan-out
 # lives. A worker container takes exactly one repository off the queue by
 # design — it builds an environment, runs a suite twice and may call a model,
@@ -386,7 +393,7 @@ deploy_job() {
 # running it twice in parallel would publish every job twice.
 case "$TARGET" in
   scanner|all) deploy_job scanner nightshift-scanner 900s read 1 1Gi 1 ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 4Gi 10 ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 8Gi 10 ;;&
   api|all)
     build_and_push api
     say "deploying api"

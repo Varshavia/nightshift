@@ -143,10 +143,14 @@ def test_every_job_states_its_own_cpu_and_memory() -> None:
     repository had finished installing. It arrives as "the configured memory
     limit was reached" alongside exit code 0, which nobody reads as out of
     memory on the first pass.
+
+    Raised to 8Gi after four gigabytes held for eighteen repositories out of
+    twenty. The two it did not hold for — 427 pinned dependencies, and a
+    machine-learning stack — are the two the fleet most wants to reach.
     """
     text = DEPLOY.read_text(encoding="utf-8")
     assert '--cpu "$cpu" --memory "$memory"' in text
-    for job, memory in (("scanner", "1Gi"), ("worker", "4Gi")):
+    for job, memory in (("scanner", "1Gi"), ("worker", "8Gi")):
         assert re.search(rf"deploy_job\s+{job}\s+\S+\s+\S+\s+\S+\s+\d+\s+{memory}", text), (
             f"{job} must state its memory; the default is not enough for what it does"
         )
