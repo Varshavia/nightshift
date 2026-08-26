@@ -106,6 +106,65 @@ def test_the_script_passes_no_absolute_posix_path_to_gcloud() -> None:
     )
 
 
+def test_the_script_fills_gaps_from_dotenv_without_overriding_the_environment() -> None:
+    """The rule the Python side already follows, asserted for the shell side.
+
+    A new terminal has no NIGHTSHIFT_GCP_PROJECT, so the deployment stopped
+    before it started and the workaround was to paste exports — which is how a
+    value ends up in shell history and eventually wrong. The file is read, but
+    only into gaps: a variable that is already set outranks it, or a stale
+    `.env` would quietly outvote what CI or a colleague's shell had chosen.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert 'env_file="$(dirname "$0")/../.env"' in text
+    assert '[[ -n "${!name:-}" ]] || export' in text, "a set variable must win"
+
+
+def test_the_dotenv_file_is_read_and_never_executed() -> None:
+    """`source .env` would run whatever a stray backtick in it said.
+
+    It is a data file that people paste tokens into, not a script, and nothing
+    about editing it suggests you are writing code that will run.
+    """
+    offenders = [
+        (number, line)
+        for number, line in enumerate(lines(), start=1)
+        if not line.lstrip().startswith("#")
+        and re.search(r"(^|\s)(source|\.)\s+\S*\.env", line)
+    ]
+    assert not offenders, "read the dotenv file line by line; never source it"
+
+
+def test_every_job_states_its_own_cpu_and_memory() -> None:
+    """Cloud Run's default is 512Mi, and the worker needs several times that.
+
+    Building somebody else's Python project means pip compiling wheels, and at
+    the default the worker was killed 97 seconds in — before the first
+    repository had finished installing. It arrives as "the configured memory
+    limit was reached" alongside exit code 0, which nobody reads as out of
+    memory on the first pass.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert '--cpu "$cpu" --memory "$memory"' in text
+    for job, memory in (("scanner", "1Gi"), ("worker", "4Gi")):
+        assert re.search(rf"deploy_job\s+{job}\s+\S+\s+\S+\s+\S+\s+\d+\s+{memory}", text), (
+            f"{job} must state its memory; the default is not enough for what it does"
+        )
+
+
+def test_the_worker_is_given_more_memory_than_the_scanner() -> None:
+    """One reads two small files per repository; the other builds a project from
+    source. Sizing them alike means either paying for the scanner or killing the
+    worker, and it was the worker."""
+    text = DEPLOY.read_text(encoding="utf-8")
+    sizes = {}
+    for job in ("scanner", "worker"):
+        match = re.search(rf"deploy_job\s+{job}\s+\S+\s+\S+\s+\S+\s+\d+\s+(\d+)Gi", text)
+        assert match is not None
+        sizes[job] = int(match.group(1))
+    assert sizes["worker"] > sizes["scanner"]
+
+
 def test_the_worker_image_declares_its_own_workspace_root() -> None:
     """The other half of the same fix: the value did not vanish, it moved."""
     dockerfile = DEPLOY.parent.parent / "services" / "worker" / "Dockerfile"

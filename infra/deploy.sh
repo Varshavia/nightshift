@@ -27,6 +27,30 @@ set -euo pipefail
 # that exists inside the image, created and chowned there, and nothing outside
 # the image gets a say in where it is.
 
+# The same `.env` the services read, under the same rule: a variable that is
+# already set wins, and the file only fills gaps. Without this a fresh terminal
+# is a fresh deployment failure — `set NIGHTSHIFT_GCP_PROJECT` — and the answer
+# on offer is to paste exports, which is how a project id and a fork
+# organisation end up in shell history, in a screenshot, and eventually wrong.
+# The values are configuration, not secrets, and they are already written down
+# one directory up; the script should read them rather than ask.
+#
+# Deliberately not `source`: a dotenv file is data, and sourcing it would run
+# whatever a stray backtick in it happened to say.
+env_file="$(dirname "$0")/../.env"
+if [[ -f "$env_file" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"                      # the file is edited on Windows
+    line="${line#export }"
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+    name="${line%%=*}"
+    value="${line#*=}"
+    [[ "$value" == \"*\" || "$value" == \'*\' ]] && value="${value:1:${#value}-2}"
+    [[ -n "${!name:-}" ]] || export "$name=$value"
+  done < "$env_file"
+fi
+
 PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
 TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"
@@ -301,6 +325,7 @@ build_and_push() {
 
 deploy_job() {
   local service="$1" sa="$2" timeout="$3" wants_token="${4:-no}"
+  local cpu="$5" memory="$6"
 
   # The GitHub token is attached to the worker and to nothing else. The scanner
   # reads advisories and publishes messages; it has no use for a credential that
@@ -332,14 +357,25 @@ deploy_job() {
     --service-account "${sa}@${PROJECT}.iam.gserviceaccount.com" \
     --task-timeout "$timeout" \
     --max-retries 1 \
+    --cpu "$cpu" --memory "$memory" \
     --set-env-vars "^@^NIGHTSHIFT_GCP_PROJECT=${PROJECT}@NIGHTSHIFT_GCP_REGION=${REGION}@NIGHTSHIFT_JOBS_TOPIC=${TOPIC}@NIGHTSHIFT_JOBS_SUBSCRIPTION=${SUBSCRIPTION}@NIGHTSHIFT_FLEET_POOL=${FLEET_POOL}@NIGHTSHIFT_REPAIR_MODEL=${REPAIR_MODEL}@NIGHTSHIFT_ESCALATION_MODEL=${ESCALATION_MODEL}@NIGHTSHIFT_FORK_ORG=${FORK_ORG}@ALLOW_UPSTREAM_PRS=false" \
     ${secret_args[@]+"${secret_args[@]}"} \
     --quiet
 }
 
+# Sized from what each job actually does, not from Cloud Run's 512Mi default.
+#
+# The scanner reads two small files per repository and holds a list of pins in
+# memory; a gigabyte is already generous. The worker builds somebody else's
+# Python project from source — pip resolving forty pinned dependencies and
+# compiling wheels for lxml, mysqlclient and cryptography is the memory-hungriest
+# thing this fleet does, and at the default it was killed 97 seconds in, before
+# the first repository had finished installing. A job that dies mid-build reports
+# nothing about the repository it was building, which is the one outcome this
+# project refuses to produce.
 case "$TARGET" in
-  scanner|all) deploy_job scanner nightshift-scanner 900s read ;;&
-  worker|all)  deploy_job worker  nightshift-worker  1800s write ;;&
+  scanner|all) deploy_job scanner nightshift-scanner 900s read 1 1Gi ;;&
+  worker|all)  deploy_job worker  nightshift-worker  1800s write 2 4Gi ;;&
   api|all)
     build_and_push api
     say "deploying api"
