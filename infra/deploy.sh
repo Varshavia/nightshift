@@ -55,6 +55,7 @@ PROJECT="${NIGHTSHIFT_GCP_PROJECT:?set NIGHTSHIFT_GCP_PROJECT}"
 REGION="${NIGHTSHIFT_GCP_REGION:-us-central1}"
 TOPIC="${NIGHTSHIFT_JOBS_TOPIC:-nightshift-jobs}"
 SUBSCRIPTION="${NIGHTSHIFT_JOBS_SUBSCRIPTION:-nightshift-jobs-workers}"
+DEAD_LETTER="${NIGHTSHIFT_JOBS_DEAD_LETTER:-nightshift-jobs-dead}"
 REPO="nightshift"
 TARGET="${1:-all}"
 
@@ -104,6 +105,7 @@ create_sa() {
 # "Updated IAM policy" scroll past — long enough that the first person to see it
 # reasonably concluded the script had hung.
 POLICY="$(gcloud projects get-iam-policy "$PROJECT" --format=json)"
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 
 grant() {
   local name="$1" role="$2"
@@ -269,13 +271,60 @@ fi
 # extending the lease while its callback is still working; the deadline here is
 # the ceiling on how long a *dead* worker holds a repository hostage before
 # somebody else may retry it.
+# Where a repository goes when the fleet cannot make progress on it.
+#
+# The worker nacks INFRA_ERROR on purpose: a network blip or a Firestore outage
+# deserves another go. What that reasoning missed is that most infrastructure
+# errors are not blips. `AIF360` returns pytest exit 3 every single time we
+# invoke it, so it came back, failed identically, came back again — seven times
+# in one forty-minute window, each costing a full environment build — while
+# forty other repositories waited behind it. A retry policy with no ceiling is
+# not resilience, it is a queue eating itself.
+#
+# Five attempts, then the message moves here and stops circulating. It is kept
+# rather than dropped because the useful question the next morning is which
+# repositories the fleet could not get through, and a discarded message cannot
+# answer it.
+if ! gcloud pubsub topics describe "$DEAD_LETTER" --project "$PROJECT" >/dev/null 2>&1; then
+  say "creating Pub/Sub dead-letter topic ${DEAD_LETTER}"
+  gcloud pubsub topics create "$DEAD_LETTER" --project "$PROJECT"
+fi
+
+if ! gcloud pubsub subscriptions describe "$DEAD_LETTER" --project "$PROJECT" >/dev/null 2>&1; then
+  # A dead-letter topic with no subscription discards what it receives, which is
+  # the exact failure the comment above this block was written about.
+  say "creating Pub/Sub subscription ${DEAD_LETTER}"
+  gcloud pubsub subscriptions create "$DEAD_LETTER" \
+    --topic "$DEAD_LETTER" --project "$PROJECT" \
+    --message-retention-duration 7d
+fi
+
 if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION" --project "$PROJECT" >/dev/null 2>&1; then
   say "creating Pub/Sub subscription ${SUBSCRIPTION}"
   gcloud pubsub subscriptions create "$SUBSCRIPTION" \
     --topic "$TOPIC" --project "$PROJECT" \
     --ack-deadline 600 \
-    --message-retention-duration 7d
+    --message-retention-duration 7d \
+    --dead-letter-topic "$DEAD_LETTER" \
+    --max-delivery-attempts 5
+else
+  # Stated on every run, not only at creation. The subscription already existed
+  # without a ceiling, and a script that configures a resource once is a script
+  # whose comments describe a system nobody is running.
+  say "confirming the delivery ceiling on ${SUBSCRIPTION}"
+  gcloud pubsub subscriptions update "$SUBSCRIPTION" --project "$PROJECT" \
+    --dead-letter-topic "$DEAD_LETTER" \
+    --max-delivery-attempts 5 >/dev/null
 fi
+
+# Pub/Sub moves the message itself, so its own service account needs to be able
+# to publish to the dead-letter topic and acknowledge on the subscription.
+# Without these the policy is accepted and silently does nothing.
+PUBSUB_SA="service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
+gcloud pubsub topics add-iam-policy-binding "$DEAD_LETTER" --project "$PROJECT" \
+  --member "serviceAccount:${PUBSUB_SA}" --role roles/pubsub.publisher --quiet >/dev/null
+gcloud pubsub subscriptions add-iam-policy-binding "$SUBSCRIPTION" --project "$PROJECT" \
+  --member "serviceAccount:${PUBSUB_SA}" --role roles/pubsub.subscriber --quiet >/dev/null
 
 if ! gcloud artifacts repositories describe "$REPO" \
     --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then

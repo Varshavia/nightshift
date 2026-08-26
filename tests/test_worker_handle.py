@@ -60,7 +60,18 @@ def patch_suite(monkeypatch: pytest.MonkeyPatch, results: list[bool]) -> None:
     remaining = iter(results)
 
     def fake(sandbox: object, **kwargs: object) -> TestReport:
-        return TestReport(passed=next(remaining), output="x", duration_seconds=0.1)
+        # A report thin enough to be a bool was fine while the gate was
+        # `baseline.passed`. It is not fine now: the worker asks how much of the
+        # suite is green and which tests are red, and a stub that answers "zero
+        # collected, none failing" is a repository with no tests.
+        passed = next(remaining)
+        return TestReport(
+            passed=passed,
+            output="x",
+            duration_seconds=0.1,
+            tests_collected=10,
+            failures=frozenset() if passed else frozenset({"tests/test_x.py::test_y"}),
+        )
 
     monkeypatch.setattr(worker, "run_tests", fake)
     monkeypatch.setattr("services.worker.repair.run_tests", fake)
@@ -118,11 +129,69 @@ def test_a_suite_that_collects_nothing_is_unbuildable(patched: pytest.MonkeyPatc
     assert "collected no tests" in job.notes
 
 
-def test_a_red_baseline_stops_before_any_upgrade(patched: pytest.MonkeyPatch) -> None:
-    patch_suite(patched, [False])
+def test_a_suite_where_nothing_passes_stops_before_any_upgrade(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """BASELINE_RED now means what it says: no part of this suite works here.
+
+    It used to mean "one test somewhere is red", which threw away a repository
+    with a hundred passing tests over a single failure belonging to our
+    container — and filed our limitation as the repository's condition.
+    """
+    _patch_baseline(patched, collected=8, failing=8)
     job = run()
     assert job.outcome is Outcome.BASELINE_RED
     assert job.repair_attempts == []
+
+
+def test_a_mostly_red_suite_is_our_environment_not_their_code(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """A maintained project does not ship a suite that is ninety percent red.
+
+    When it looks that way from inside our container, the container is what is
+    wrong — and saying so keeps the count of repositories that arrived broken
+    from being padded with our own failures.
+    """
+    _patch_baseline(patched, collected=20, failing=18)
+    job = run()
+    assert job.outcome is Outcome.UNBUILDABLE
+    assert "the environment is wrong, not the repository" in job.notes
+
+
+def test_a_single_pre_existing_failure_does_not_disqualify_a_repository(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """flask-jwt-extended: 106 passing, one failing on a crypto backend this
+    image lacks. The old rule discarded it; the break is what the upgrade
+    changed, and that test was red before we arrived."""
+    _patch_baseline(patched, collected=107, failing=1)
+    job = run()
+    assert job.outcome is Outcome.PATCHED_CLEAN, "the upgrade broke nothing new"
+
+
+def _patch_baseline(
+    monkeypatch: pytest.MonkeyPatch, *, collected: int, failing: int
+) -> None:
+    """Every suite run returns the same report: `failing` of `collected` red.
+
+    The upgrade changes nothing, so a repository that gets past the baseline
+    gate reaches PATCHED_CLEAN — which is exactly what "the break is what
+    changed" should produce when nothing changed.
+    """
+    red = frozenset(f"tests/test_{n}.py::test_{n}" for n in range(failing))
+
+    def fake(sandbox: object, **kwargs: object) -> TestReport:
+        return TestReport(
+            passed=not red,
+            output="x",
+            duration_seconds=0.1,
+            tests_collected=collected,
+            failures=red,
+        )
+
+    monkeypatch.setattr(worker, "run_tests", fake)
+    monkeypatch.setattr("services.worker.repair.run_tests", fake)
 
 
 def test_an_upgrade_that_breaks_nothing_is_patched_clean(patched: pytest.MonkeyPatch) -> None:

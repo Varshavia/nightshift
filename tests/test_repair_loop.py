@@ -48,8 +48,14 @@ def make_suite(results: list[bool]) -> Callable[..., TestReport]:
 
     def run_suite(sandbox: Sandbox, **kwargs: object) -> TestReport:
         passed = remaining.pop(0) if remaining else False
+        # `failures` matters as much as `passed` now: the loop asks what the
+        # upgrade changed, not whether every test in the repository is green.
         return TestReport(
-            passed=passed, output="green" if passed else "boom", duration_seconds=0.1
+            passed=passed,
+            output="green" if passed else "boom",
+            duration_seconds=0.1,
+            tests_collected=10,
+            failures=frozenset() if passed else frozenset({"tests/test_x.py::test_y"}),
         )
 
     return run_suite
@@ -66,7 +72,13 @@ def no_drift(sandbox: Sandbox, vulnerabilities: object) -> list[UpgradeDrift]:
 
 
 def failure(output: str = "ImportError") -> TestReport:
-    return TestReport(passed=False, output=output, duration_seconds=0.1)
+    return TestReport(
+        passed=False,
+        output=output,
+        duration_seconds=0.1,
+        tests_collected=10,
+        failures=frozenset({"tests/test_x.py::test_y"}),
+    )
 
 
 @pytest.fixture

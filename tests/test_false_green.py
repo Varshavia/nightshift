@@ -46,6 +46,14 @@ VULNERABILITY = Vulnerability(
 )
 
 
+def _still_red() -> TestReport:
+    """A suite whose failure did not go away. Named because the loop now asks
+    which tests are red rather than whether any are."""
+    return TestReport(
+        False, "boom", 0.1, tests_collected=10, failures=frozenset({"tests/test_x.py::test_y"})
+    )
+
+
 @pytest.fixture
 def engine() -> PolicyEngine:
     return PolicyEngine(
@@ -141,7 +149,11 @@ def test_what_the_agent_runs_never_becomes_the_verdict(tmp_path: Path) -> None:
         agent,
         tools=tools,
         run_suite=lambda sandbox, **kwargs: TestReport(
-            passed=False, output="still boom", duration_seconds=0.1
+            passed=False,
+            output="still boom",
+            duration_seconds=0.1,
+            tests_collected=10,
+            failures=frozenset({"tests/test_x.py::test_y"}),
         ),
         capture=lambda sandbox: "",
         check_drift=lambda sandbox, vulns: [],
@@ -226,7 +238,7 @@ def test_drift_is_only_checked_when_there_is_a_green_to_doubt(tmp_path: Path) ->
         TestReport(passed=False, output="boom", duration_seconds=0.1),
         policy, budget, DowngradingAgent(),
         tools=tools,
-        run_suite=lambda sandbox, **kwargs: TestReport(False, "boom", 0.1),
+        run_suite=lambda sandbox, **kwargs: _still_red(),
         capture=lambda sandbox: "",
         check_drift=record,
     )

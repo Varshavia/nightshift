@@ -139,3 +139,33 @@ def test_no_unfinished_state_is_smuggled_into_the_outcome_enum() -> None:
     queue, not verdicts."""
     outcomes = {str(outcome) for outcome in Outcome}
     assert not outcomes & {"ABANDONED", "WAITING", "IN_FLIGHT"}
+
+
+def test_a_run_is_the_part_of_the_job_id_before_the_colon() -> None:
+    """Both stores have to agree about where the run id lives.
+
+    The Firestore store filtered on a `run_id` field, and no such field is ever
+    written — so every filtered query came back empty and the control tower
+    could only show every night at once. The memory store had it right from the
+    start, which is what made the disagreement invisible in tests.
+    """
+    store = MemoryJobStore()
+    store.put(RepoJob(job_id="runA:org/one", repo="org/one"))
+    store.put(RepoJob(job_id="runB:org/two", repo="org/two"))
+
+    assert [job.repo for job in store.list_jobs(run_id="runA")] == ["org/one"]
+    assert len(store.list_jobs()) == 2
+
+
+def test_the_firestore_filter_brackets_the_prefix_rather_than_naming_a_column() -> None:
+    """Asserted on the source, because the alternative is a Firestore emulator.
+
+    The bug was silent — an empty result is a valid answer — so what is checked
+    is that the query is a range over `job_id` and not an equality on a field
+    that does not exist.
+    """
+    import inspect
+
+    source = inspect.getsource(FirestoreJobStore.list_jobs)
+    assert 'where("run_id", "==", run_id)' not in source, "no document carries that field"
+    assert 'where("job_id", ">="' in source

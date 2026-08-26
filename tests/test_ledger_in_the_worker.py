@@ -90,7 +90,14 @@ def _suite(results: list[bool], monkeypatch: pytest.MonkeyPatch) -> None:
     remaining = iter(results)
 
     def fake(sandbox: object, **kwargs: object) -> TestReport:
-        return TestReport(passed=next(remaining), output="ImportError", duration_seconds=0.1)
+        passed = next(remaining)
+        return TestReport(
+            passed=passed,
+            output="ImportError",
+            duration_seconds=0.1,
+            tests_collected=10,
+            failures=frozenset() if passed else frozenset({"tests/test_x.py::test_y"}),
+        )
 
     monkeypatch.setattr(worker, "run_tests", fake)
     monkeypatch.setattr("services.worker.repair.run_tests", fake)

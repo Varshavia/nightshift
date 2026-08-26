@@ -192,3 +192,44 @@ def test_the_worker_image_declares_its_own_workspace_root() -> None:
     text = dockerfile.read_text(encoding="utf-8")
     assert "ENV NIGHTSHIFT_WORKSPACE_ROOT=/workspace" in text
     assert "mkdir -p /workspace" in text, "the root has to exist in the image that names it"
+
+
+def test_a_failing_repository_cannot_circulate_for_ever() -> None:
+    """The worker nacks INFRA_ERROR on purpose, and most of them are not blips.
+
+    `AIF360` returns pytest exit 3 every time we invoke it. It came back, failed
+    identically, came back again — seven deliveries in one forty-minute window,
+    each costing a full environment build — while forty other repositories
+    waited behind it. A retry policy with no ceiling is not resilience.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert "--dead-letter-topic" in text
+    assert re.search(r"--max-delivery-attempts\s+\d+", text)
+
+
+def test_the_ceiling_is_applied_to_a_subscription_that_already_exists() -> None:
+    """The subscription was created before the policy existed, so a script that
+    only configures at creation time would leave the running fleet unchanged and
+    the comments describing a system nobody is running."""
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert "gcloud pubsub subscriptions update" in text
+
+
+def test_the_dead_letter_topic_has_somewhere_to_put_things() -> None:
+    """A topic with no subscription discards what it receives — the exact
+    failure that lost the scanner's first twenty-one jobs. A dead letter nobody
+    can read cannot answer "which repositories did the fleet give up on"."""
+    text = DEPLOY.read_text(encoding="utf-8")
+    created = text.index('gcloud pubsub topics create "$DEAD_LETTER"')
+    subscribed = text.index('gcloud pubsub subscriptions create "$DEAD_LETTER"')
+    assert created < subscribed
+
+
+def test_pubsub_is_allowed_to_move_the_message_itself() -> None:
+    """The dead-letter policy is accepted and silently does nothing unless
+    Pub/Sub's own service account can publish to the topic and acknowledge on
+    the subscription. Silently doing nothing is the failure mode this whole
+    file exists to catch."""
+    text = DEPLOY.read_text(encoding="utf-8")
+    assert "gcp-sa-pubsub.iam.gserviceaccount.com" in text
+    assert 'gcloud pubsub topics add-iam-policy-binding "$DEAD_LETTER"' in text

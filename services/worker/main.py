@@ -120,6 +120,7 @@ def repair(
     budget: Budget,
     agent: RepairAgent,
     recipe: str = "",
+    already_failing: frozenset[str] = frozenset(),
 ) -> bool:
     """Run the bounded repair loop. True when the suite ends green.
 
@@ -132,7 +133,10 @@ def repair(
     in ``repair.py`` so that the loop can be tested with a scripted agent and no
     token spent; this stays as the worker's own vocabulary.
     """
-    return run_repair_loop(job, sandbox, failure, policy, budget, agent, recipe=recipe)
+    return run_repair_loop(
+        job, sandbox, failure, policy, budget, agent,
+        recipe=recipe, already_failing=already_failing,
+    )
 
 
 def open_pull_request(
@@ -250,8 +254,39 @@ def _run(
         # Reported as UNBUILDABLE with an explicit note rather than given its own
         # enum member: adding one requires an ADR. See docs/decisions/0003.
         return finish(Outcome.UNBUILDABLE, notes="pytest collected no tests")
-    if not baseline.passed:
-        return finish(Outcome.BASELINE_RED, notes="suite was already failing before the upgrade")
+
+    # What the probe learned over two measurement rounds, and the worker did not.
+    #
+    # This gate used to be `if not baseline.passed` — one red test anywhere and
+    # the repository was recorded as having arrived broken. Fifty-eight
+    # repositories went through the fleet under that rule and not one reached
+    # the upgrade: thirty-five were filed BASELINE_RED, which reads as a fact
+    # about them and was usually a fact about our container. A maintained
+    # project does not ship a suite that is ninety percent red.
+    #
+    # The replacement is looser in one direction and stricter in the other. A
+    # repository with a hundred passing tests and one failing on a crypto
+    # backend this image lacks is usable — flask-jwt-extended, thrown away by
+    # the old rule — and what counts as a break afterwards is what the upgrade
+    # *changed*, not what was already red. See scripts/probe_fleet.py, where
+    # this is the same code and the same three cases.
+    already_failing = baseline.failures
+    passing = baseline.tests_collected - len(already_failing)
+    if passing <= 0:
+        return finish(
+            Outcome.BASELINE_RED,
+            notes=f"pytest exit {baseline.exit_code}; nothing in the suite passes",
+        )
+    if passing * 2 < baseline.tests_collected:
+        # Our limitation, stated as one. Kept out of BASELINE_RED so the count of
+        # repositories that arrived broken is not padded with our own failures.
+        return finish(
+            Outcome.UNBUILDABLE,
+            notes=(
+                f"only {passing} of {baseline.tests_collected} tests pass before we "
+                "change anything; the environment is wrong, not the repository"
+            ),
+        )
 
     checkpoint(Phase.UPGRADE)
     fixable = job.actionable_vulnerabilities
@@ -264,6 +299,11 @@ def _run(
 
     checkpoint(Phase.VERIFY)
     verified = run_tests(sandbox)
+    # The break is what the upgrade changed. A test that was red before we
+    # touched anything stays red without counting against the upgrade, which is
+    # a sharper instrument than a single pass-or-fail bit — and the only one
+    # that works once a baseline with pre-existing failures is allowed through.
+    broke = verified.failures - already_failing
     # Clone, build and two full suite runs happened before this line, and they
     # are the slowest part of a job. The repair loop inherits the time they
     # spent rather than starting from zero.
@@ -271,7 +311,7 @@ def _run(
 
     repaired = False
     retrieval = None
-    if not verified.passed:
+    if broke:
         checkpoint(Phase.REPAIR)
         # Consulted only once the upgrade has actually broken something. A
         # PATCHED_CLEAN job has nothing to look up, and asking anyway would put
@@ -284,7 +324,14 @@ def _run(
         # it will not use.
         try:
             repaired = repair(
-                job, sandbox, verified, policy, budget, build_repair_agent(settings), recipe=recipe
+                job,
+                sandbox,
+                verified,
+                policy,
+                budget,
+                build_repair_agent(settings),
+                recipe=recipe,
+                already_failing=already_failing,
             )
         except ModelUnreachable as exc:
             # Not REPAIR_EXHAUSTED. That outcome means the agent tried and could
