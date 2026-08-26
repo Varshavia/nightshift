@@ -96,6 +96,7 @@ def run_repair_loop(
     capture: Callable[[Sandbox], str] | None = None,
     check_drift: Callable[..., Sequence[UpgradeDrift]] | None = None,
     recipe: str = "",
+    already_failing: frozenset[str] = frozenset(),
 ) -> bool:
     """Repair until the suite is green or a ceiling is reached. True when green.
 
@@ -154,8 +155,15 @@ def run_repair_loop(
         # to change an environment than an allowlist can enumerate. So the
         # outcome is checked directly: if the library we came to upgrade is not
         # the version we upgraded it to, the suite passing means nothing.
-        drift = tuple(check_drift(sandbox, job.vulnerabilities)) if verdict.passed else ()
-        green = verdict.passed and not drift
+        # Green means "nothing the upgrade broke is still broken", not "every
+        # test in this repository passes". Those differ whenever the baseline was
+        # allowed through with pre-existing failures, which it now is — demanding
+        # absolute green would ask the agent to fix a crypto test that was red
+        # before it arrived and had nothing to do with the upgrade.
+        still_broken = verdict.failures - already_failing
+        repaired_the_break = not still_broken
+        drift = tuple(check_drift(sandbox, job.vulnerabilities)) if repaired_the_break else ()
+        green = repaired_the_break and not drift
 
         job.record_attempt(
             RepairAttempt(
