@@ -133,6 +133,16 @@ class Settings:
     escalation_model: str = "gemini-3.5-pro"
     triage_model: str = "gemma-3-27b-it"
     model_backend: str = "vertex"
+    #: Where the models are served, which is not where the fleet runs.
+    #:
+    #: Vertex publishes the newest Gemini versions on the ``global`` endpoint
+    #: first and to named regions later, so reusing ``gcp_region`` here sent
+    #: every repair attempt to ``us-central1`` and collected a 404 saying the
+    #: model "was not found or your project does not have access to it" — a
+    #: sentence that reads like an entitlement problem and was a geography one.
+    #: Separate because the two answer different questions: one is where our
+    #: containers run, the other is where Google serves a model.
+    model_location: str = "global"
 
     fork_org: str = ""
     #: The reviewed list of repositories the fleet may touch. A path rather than
@@ -161,6 +171,7 @@ class Settings:
             workspace_root=_env("NIGHTSHIFT_WORKSPACE_ROOT", "/workspace"),
             repair_model=_env("NIGHTSHIFT_REPAIR_MODEL", "gemini-3.5-flash"),
             escalation_model=_env("NIGHTSHIFT_ESCALATION_MODEL", "gemini-3.5-pro"),
+            model_location=_env("NIGHTSHIFT_MODEL_LOCATION", "global"),
             triage_model=_env("NIGHTSHIFT_TRIAGE_MODEL", "gemma-3-27b-it"),
             model_backend=_env("NIGHTSHIFT_MODEL_BACKEND", "vertex"),
             fork_org=_env("NIGHTSHIFT_FORK_ORG"),

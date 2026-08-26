@@ -42,7 +42,7 @@ from nightshift_core.ledger import (
 from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import FirestoreJobStore, JobStore
-from services.worker.agent import build_repair_agent
+from services.worker.agent import ModelUnreachable, build_repair_agent
 from services.worker.librarian import Librarian, shelve_repair
 from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
@@ -282,9 +282,17 @@ def _run(
         # Built here rather than at the top of ``handle``: a PATCHED_CLEAN job
         # never reaches this line, and it should never pay to construct an agent
         # it will not use.
-        repaired = repair(
-            job, sandbox, verified, policy, budget, build_repair_agent(settings), recipe=recipe
-        )
+        try:
+            repaired = repair(
+                job, sandbox, verified, policy, budget, build_repair_agent(settings), recipe=recipe
+            )
+        except ModelUnreachable as exc:
+            # Not REPAIR_EXHAUSTED. That outcome means the agent tried and could
+            # not fix it, and it is the number the project publishes; awarding it
+            # to a job where no model was ever reached would put failures in the
+            # denominator that nobody attempted. The first benchmark run did
+            # exactly that against absent credentials.
+            return finish(Outcome.INFRA_ERROR, notes=f"model unreachable: {exc}"[:500])
         if not repaired:
             record_in_ledger(job, ledger, retrieval, Outcome.REPAIR_EXHAUSTED)
             return finish(

@@ -268,3 +268,60 @@ def test_an_unreadable_message_is_not_redelivered_forever(
     _drain(monkeypatch, message, None)
 
     assert message.acked
+
+
+def test_a_model_nobody_could_reach_is_not_a_failed_repair(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """The first benchmark run reported REPAIR_EXHAUSTED having called nothing.
+
+    Application Default Credentials were absent, ADK logged the failure on a
+    worker thread and handed back an empty event stream four times, and the loop
+    charged four attempts for work nobody did. REPAIR_EXHAUSTED means the agent
+    tried and could not fix it — it is the denominator of the number this
+    project publishes — so awarding it here inflates the failures with jobs that
+    were never attempted. The tell was in the same log line: zero tokens.
+    """
+    from services.worker.agent import ModelUnreachable
+
+    patch_suite(patched, [True, False])
+
+    def unreachable(settings: Settings) -> object:
+        class Agent:
+            def attempt(self, context: object, tools: object) -> RepairProposal:
+                raise ModelUnreachable("DefaultCredentialsError: no ADC")
+
+        return Agent()
+
+    patched.setattr(worker, "build_repair_agent", unreachable)
+
+    finished = run()
+
+    assert finished.outcome is Outcome.INFRA_ERROR
+    assert "model unreachable" in finished.notes
+    assert finished.repair_attempts == [], "an attempt nobody made is not an attempt"
+
+
+def test_a_real_failed_repair_is_still_repair_exhausted(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """The other half: an agent that answers and gets it wrong must still count.
+
+    Routing genuine failures to INFRA_ERROR would flatter the repair rate by
+    quietly dropping every case the agent lost.
+    """
+    patch_suite(patched, [True, False, False, False, False, False, False, False])
+
+    def wrong(settings: Settings) -> object:
+        class Agent:
+            def attempt(self, context: object, tools: object) -> RepairProposal:
+                return RepairProposal(rationale="tried renaming the import", tokens_used=1200)
+
+        return Agent()
+
+    patched.setattr(worker, "build_repair_agent", wrong)
+
+    finished = run()
+
+    assert finished.outcome is Outcome.REPAIR_EXHAUSTED
+    assert finished.tokens_used > 0, "a real exhaustion cannot cost nothing"

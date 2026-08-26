@@ -1,4 +1,4 @@
-.PHONY: help install test lint types check scan run-local deploy diagram clean
+.PHONY: help install test lint types check scan run-local benchmark deploy diagram clean
 
 PYTHON ?= python3
 
@@ -29,6 +29,9 @@ run-local:  ## End to end on one repository: make run-local REPO=owner/name
 	# when the repository root is on sys.path, which -m provides and a bare path
 	# invocation does not.
 	$(PYTHON) -m scripts.run_local --repo "$(REPO)"
+
+benchmark:  ## Run the Tier A regression cases: make benchmark [CASE=<id>]
+	$(PYTHON) -m scripts.run_benchmark $(if $(CASE),--case "$(CASE)",)
 
 deploy:  ## Deploy to GCP (idempotent)
 	./infra/deploy.sh

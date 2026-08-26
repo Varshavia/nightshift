@@ -9,11 +9,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
 from services.worker.agent import (
     REPAIR_INSTRUCTION,
     GeminiRepairAgent,
+    ModelUnreachable,
     build_repair_agent,
     final_text,
+    proposal_from,
     render_attempt_prompt,
     total_tokens,
 )
@@ -177,3 +180,37 @@ def test_total_tokens_sums_every_turn() -> None:
 
 def test_total_tokens_of_nothing_is_zero() -> None:
     assert total_tokens([]) == 0
+
+
+def test_a_turn_that_cost_nothing_and_said_nothing_never_reached_a_model() -> None:
+    """Two benchmark runs reported REPAIR_EXHAUSTED having called nothing.
+
+    ADK raises the model error on its own thread and still yields events here,
+    so checking for an empty stream was not enough — the loop received a
+    proposal with no rationale and no tokens and spent an attempt on it. Zero
+    tokens is the signal that holds: a model that answered says what the answer
+    cost, even when the answer is useless.
+    """
+    with pytest.raises(ModelUnreachable):
+        proposal_from([FakeEvent(content=None, usage_metadata=None)])
+
+
+def test_an_empty_stream_is_also_unreachable() -> None:
+    with pytest.raises(ModelUnreachable):
+        proposal_from([])
+
+
+def test_a_model_that_answered_badly_is_still_an_answer() -> None:
+    """The other side of the line. An agent that spent tokens and got it wrong
+    must reach the loop, or every failed repair would be excused as an outage."""
+    proposal = proposal_from(
+        [
+            FakeEvent(
+                content=FakeContent([FakePart("I renamed the import and hoped")]),
+                usage_metadata=FakeUsage(total_token_count=900),
+            )
+        ]
+    )
+
+    assert proposal.tokens_used == 900
+    assert "renamed" in proposal.rationale
