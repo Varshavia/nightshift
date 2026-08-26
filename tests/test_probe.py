@@ -25,6 +25,15 @@ from services.worker.toolchain import TestReport, collection_counts, failing_ids
 from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
 
 
+#: These tests stub the prober out, so what they exercise is argument handling
+#: and output — this machine is exactly what they mean to measure. Said with the
+#: flag rather than by leaving the guard out of their way, because the guard
+#: exists to make measuring the host a decision somebody made on purpose. It was
+#: added on Linux and turned four of these red on the Windows machine the team
+#: develops on, which is its own small lesson about where a suite gets run.
+HOST = ["--allow-host-platform"]
+
+
 def _result(verdict: ProbeVerdict, repo: str = "a/b", **kwargs: object) -> ProbeResult:
     return ProbeResult(repo=repo, verdict=verdict, **kwargs)  # type: ignore[arg-type]
 
@@ -146,7 +155,7 @@ def test_the_probe_reads_the_reviewed_pool_by_default(
     monkeypatch.setattr(probe_fleet, "probe_fleet", record)
 
     probe_fleet.main(
-        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json")]
+        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json"), *HOST]
     )
 
     assert seen == [["me/service"]]
@@ -155,7 +164,7 @@ def test_the_probe_reads_the_reviewed_pool_by_default(
 def test_a_missing_pool_says_how_to_build_one(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json")])
+    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json"), *HOST])
 
     assert code == 2
     assert "build_fork_pool.py" in capsys.readouterr().err
@@ -180,7 +189,7 @@ def test_every_verdict_is_written_down_not_only_the_breaking_ones(
     )
     out = tmp_path / "cases.json"
 
-    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out)])
+    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out), *HOST])
 
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["cases"] == []
@@ -197,7 +206,7 @@ def test_an_unmeasured_break_rate_does_not_read_as_zero(
     )
 
     probe_fleet.main(
-        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json")]
+        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json"), *HOST]
     )
 
     assert "unmeasured rather than zero" in capsys.readouterr().out

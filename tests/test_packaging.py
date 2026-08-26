@@ -110,3 +110,26 @@ def test_the_domain_declares_what_it_actually_imports() -> None:
         "the domain's dependencies changed; add the new one to every "
         "services/*/requirements.txt in the same commit"
     )
+
+
+def test_both_images_can_fetch_an_interpreter() -> None:
+    """`uv` is what makes interpreter.py more than a preference.
+
+    Without it the module falls back to the worker's own Python, silently and
+    by design — so an image that ships the code and not the tool would keep
+    offering 3.12 to projects that asked for 3.9 while the tests all passed.
+    """
+    root = Path(__file__).resolve().parent.parent
+    for name in ("services/worker/Dockerfile", "infra/probe.Dockerfile"):
+        text = (root / name).read_text(encoding="utf-8")
+        assert "astral-sh/uv" in text, f"{name} cannot fetch an interpreter"
+
+
+def test_the_probe_and_the_worker_are_built_the_same_way() -> None:
+    """The probe predicts what the fleet will do. It cannot do that from a
+    richer environment than the fleet has — or a poorer one."""
+    root = Path(__file__).resolve().parent.parent
+    worker = (root / "services/worker/Dockerfile").read_text(encoding="utf-8")
+    probe = (root / "infra/probe.Dockerfile").read_text(encoding="utf-8")
+    for library in ("default-libmysqlclient-dev", "libpq-dev", "libxslt1-dev", "astral-sh/uv"):
+        assert (library in worker) == (library in probe), f"{library} is in one image only"

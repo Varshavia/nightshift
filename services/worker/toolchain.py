@@ -40,6 +40,7 @@ from nightshift_core.manifests import (
     rewrite_pin,
 )
 from nightshift_core.models import Dependency, Vulnerability
+from services.worker.interpreter import choose_interpreter
 
 __all__ = [
     "DiffStats",
@@ -442,12 +443,17 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     swallowed exception.
     """
     venv_path = venv_path or repo_path.parent / ".venv"
+
+    # Which Python, before anything is installed with it. The fleet used to
+    # offer every repository the interpreter running the worker, and a project
+    # that asked for 3.9 got 3.12 and failed on `distutils` — a verdict about
+    # our container, filed as one about the repository. See interpreter.py.
+    choice = choose_interpreter(repo_path)
     created = subprocess.run(
-        # The interpreter running us, not a `python3` we hope is on PATH. In the
-        # container they are the same thing; on a Windows machine `python3` is
+        # Never a bare `python3` we hope is on PATH: on a Windows machine that is
         # either absent or the Store's stub that opens a shop page, and the
         # failure arrives as "virtualenv creation failed" with an empty stderr.
-        [sys.executable, "-m", "venv", str(venv_path)],
+        [str(choice.python), "-m", "venv", str(venv_path)],
         capture_output=True,
         text=True,
         timeout=INSTALL_TIMEOUT,
@@ -458,6 +464,13 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
 
     python = venv_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     sandbox = Sandbox(repo_path=repo_path, python=python)
+    # First line of the install log on purpose. Every later line is about the
+    # project; this one is about what we offered it, and it is the first thing
+    # worth knowing when the rest of the log is a wall of build errors.
+    sandbox.install_log.append(
+        f"interpreter {choice.version or 'inherited'} ({choice.source})"
+        + (f" for {choice.requirement}" if choice.requirement else "")
+    )
 
     # Why the last attempt failed, not merely that it did. The install log used
     # to record "base:-e . -> failed" and throw the output away, so every
