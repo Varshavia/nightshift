@@ -219,7 +219,7 @@ def _drain(
     getting wrong, and a test that could only reach it through a Pub/Sub client
     would not be run.
     """
-    def fake_handle(job: RepoJob, store: object, settings: object) -> RepoJob:
+    def fake_handle(job: RepoJob, store: object, settings: object, **kwargs: object) -> RepoJob:
         assert finished is not None
         return finished
 
@@ -325,3 +325,18 @@ def test_a_real_failed_repair_is_still_repair_exhausted(
 
     assert finished.outcome is Outcome.REPAIR_EXHAUSTED
     assert finished.tokens_used > 0, "a real exhaustion cannot cost nothing"
+
+
+def test_a_worker_that_cannot_reach_a_librarian_still_repairs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Losing the write path costs the fleet tomorrow's shortcut. Losing the
+    repair costs it tonight's pull request, and only one of those is worth
+    failing a job over — so a Librarian that cannot be built is None, not a
+    raise."""
+    def refuse(settings: Settings) -> object:
+        raise RuntimeError("no ADK installed")
+
+    monkeypatch.setattr(worker, "build_librarian", refuse)
+
+    assert worker._librarian(SETTINGS) is None

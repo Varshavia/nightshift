@@ -301,3 +301,84 @@ def test_the_librarian_reads_the_record_it_was_rendered(tmp_path: Path) -> None:
 
     assert "--- fix ---" in librarian.prompts[0]
     assert "imported markupsafe" in librarian.prompts[0]
+
+
+def test_the_librarian_is_built_with_no_tools_at_all() -> None:
+    """The boundary in the module docstring, asserted rather than described.
+
+    "It cannot reach a repository. Not by prompt discipline — by signature."
+    An empty tool list is what makes that true at runtime. One file-reading tool
+    added later "just in case" would put a repository in front of the only agent
+    whose output every later repository reads.
+    """
+    pytest.importorskip("google.adk")
+    from services.worker.librarian import build_librarian
+
+    from nightshift_core.config import Settings
+
+    agent = build_librarian(Settings(gcp_project="p")).build_adk_agent()
+
+    assert list(agent.tools) == []
+    assert agent.name == "nightshift_librarian"
+
+
+def test_the_librarian_reaches_for_the_escalation_model() -> None:
+    """Generalising happens once per transition, not once per repository, so it
+    is the cheapest place in the fleet to spend the better model."""
+    pytest.importorskip("google.adk")
+    from services.worker.librarian import build_librarian
+
+    from nightshift_core.config import Settings
+
+    settings = Settings(gcp_project="p", escalation_model="gemini-3.5-pro")
+
+    assert build_librarian(settings).build_adk_agent().model == "gemini-3.5-pro"
+
+
+def test_an_outage_is_not_recorded_as_the_librarian_declining() -> None:
+    """`parse_verdict` reads anything it cannot understand as a refusal, which
+    is right for a bad answer and wrong for no answer.
+
+    Filing an outage as "declined" would leave the Ledger looking like it had
+    considered this transition and decided there was nothing to learn — so the
+    next repository with the same break inherits a silence that was never a
+    judgement.
+    """
+    from services.worker.agent import ModelUnreachable
+
+    class Dead:
+        def consider(self, prompt: str) -> LibrarianVerdict:
+            raise ModelUnreachable("no credentials")
+
+    job, scope, ledger = _repaired_job()
+
+    assert shelve_repair(job, scope, ledger, Dead()) is None
+    assert ledger.lookup(scope).recipe is None, "nothing may be written from nothing"
+
+
+def _repaired_job() -> tuple[RepoJob, MigrationScope, MigrationLedger]:
+    job = RepoJob(
+        job_id="run-1:a/b",
+        repo="a/b",
+        vulnerabilities=[
+            Vulnerability(
+                osv_id="GHSA-x",
+                package="jinja2",
+                installed_version="2.11.3",
+                fixed_version="3.1.2",
+                severity=Severity.HIGH,
+            )
+        ],
+        repair_attempts=[
+            RepairAttempt(
+                attempt=1,
+                tests_passed=True,
+                diff="-a\n+b",
+                rationale="moved import",
+                failing_output="ImportError",
+            )
+        ],
+    )
+    scope = MigrationScope(library="jinja2", from_version="2.11.3", to_version="3.1.2")
+    ledger = fresh_ledger()
+    return job, scope, ledger

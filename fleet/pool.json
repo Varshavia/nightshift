@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generated_at": "2026-08-24T14:50:04.764014+00:00",
-  "count": 24,
+  "count": 42,
   "entries": [
     {
       "repo": "Varshavia/throttled",
@@ -343,6 +343,262 @@
       "has_tests": true,
       "size_kb": 2653,
       "added_at": "2026-08-24T19:26:54.885523+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/ralph",
+      "upstream": "allegro/ralph",
+      "license_id": "Apache-2.0",
+      "stars": 2514,
+      "pinned_dependencies": 427,
+      "manifests": [
+        "requirements/dev.txt",
+        "requirements/test.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 39971,
+      "added_at": "2026-08-26T15:15:09.634157+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/LHM",
+      "upstream": "aigc3d/LHM",
+      "license_id": "Apache-2.0",
+      "stars": 2664,
+      "pinned_dependencies": 36,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 21121,
+      "added_at": "2026-08-26T15:15:10.572148+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/picotron",
+      "upstream": "huggingface/picotron",
+      "license_id": "Apache-2.0",
+      "stars": 2289,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 3226,
+      "added_at": "2026-08-26T15:15:11.828576+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/bloodyAD",
+      "upstream": "CravateRouge/bloodyAD",
+      "license_id": "MIT",
+      "stars": 2275,
+      "pinned_dependencies": 5,
+      "manifests": [
+        "requirements-dev.txt",
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 953,
+      "added_at": "2026-08-26T15:15:12.880566+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/baby-llama2-chinese",
+      "upstream": "DLLXW/baby-llama2-chinese",
+      "license_id": "MIT",
+      "stars": 2923,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 1039,
+      "added_at": "2026-08-26T15:15:13.773333+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/grok-register",
+      "upstream": "AaronL725/grok-register",
+      "license_id": "MIT",
+      "stars": 2149,
+      "pinned_dependencies": 17,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 2929,
+      "added_at": "2026-08-26T15:15:14.933013+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/BlackSheep",
+      "upstream": "Neoteroi/BlackSheep",
+      "license_id": "MIT",
+      "stars": 2358,
+      "pinned_dependencies": 14,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 2544,
+      "added_at": "2026-08-26T15:15:16.092978+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/AudioNotes",
+      "upstream": "harry0703/AudioNotes",
+      "license_id": "MIT",
+      "stars": 2472,
+      "pinned_dependencies": 11,
+      "manifests": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 814,
+      "added_at": "2026-08-26T15:15:16.965224+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/SkyRL",
+      "upstream": "NovaSky-AI/SkyRL",
+      "license_id": "Apache-2.0",
+      "stars": 2199,
+      "pinned_dependencies": 25,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 39910,
+      "added_at": "2026-08-26T15:15:18.137093+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/VeOmni",
+      "upstream": "ByteDance-Seed/VeOmni",
+      "license_id": "Apache-2.0",
+      "stars": 2173,
+      "pinned_dependencies": 31,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 22565,
+      "added_at": "2026-08-26T15:15:19.049811+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/tabfm",
+      "upstream": "google-research/tabfm",
+      "license_id": "Apache-2.0",
+      "stars": 2550,
+      "pinned_dependencies": 65,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 383,
+      "added_at": "2026-08-26T15:15:19.974287+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/jianying-editor-skill",
+      "upstream": "luoluoluo22/jianying-editor-skill",
+      "license_id": "MIT",
+      "stars": 2877,
+      "pinned_dependencies": 11,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 24808,
+      "added_at": "2026-08-26T15:15:20.872272+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/mobile-use",
+      "upstream": "minitap-ai/mobile-use",
+      "license_id": "Apache-2.0",
+      "stars": 2784,
+      "pinned_dependencies": 5,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 23881,
+      "added_at": "2026-08-26T15:15:21.826362+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/lighteval",
+      "upstream": "huggingface/lighteval",
+      "license_id": "MIT",
+      "stars": 2528,
+      "pinned_dependencies": 8,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 7325,
+      "added_at": "2026-08-26T15:15:22.942278+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/production-stack",
+      "upstream": "vllm-project/production-stack",
+      "license_id": "Apache-2.0",
+      "stars": 2527,
+      "pinned_dependencies": 18,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 9386,
+      "added_at": "2026-08-26T15:15:24.228973+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/spotify-github-profile",
+      "upstream": "kittinan/spotify-github-profile",
+      "license_id": "MIT",
+      "stars": 2206,
+      "pinned_dependencies": 10,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "has_tests": true,
+      "size_kb": 257,
+      "added_at": "2026-08-26T15:15:25.299260+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/jmespath.py",
+      "upstream": "jmespath/jmespath.py",
+      "license_id": "MIT",
+      "stars": 2451,
+      "pinned_dependencies": 6,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 655,
+      "added_at": "2026-08-26T15:15:26.391828+00:00",
+      "notes": ""
+    },
+    {
+      "repo": "Varshavia/openshift-ansible",
+      "upstream": "openshift/openshift-ansible",
+      "license_id": "Apache-2.0",
+      "stars": 2221,
+      "pinned_dependencies": 8,
+      "manifests": [
+        "test-requirements.txt"
+      ],
+      "has_tests": true,
+      "size_kb": 43804,
+      "added_at": "2026-08-26T15:15:27.517191+00:00",
       "notes": ""
     }
   ]

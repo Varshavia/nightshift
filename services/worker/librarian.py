@@ -24,6 +24,8 @@ Both are pure and both are covered.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import re
 from collections.abc import Sequence
@@ -33,9 +35,18 @@ from typing import Any, Protocol
 from nightshift_core.config import Settings, get_settings
 from nightshift_core.ledger import MigrationLedger, MigrationScope, Recipe
 from nightshift_core.models import RepairAttempt, RepoJob
+from services.worker.agent import (
+    AGENT_USER,
+    APP_NAME,
+    ModelUnreachable,
+    configure_backend,
+    final_text,
+    total_tokens,
+)
 
 __all__ = [
     "LIBRARIAN_INSTRUCTION",
+    "GeminiLibrarian",
     "Librarian",
     "LibrarianVerdict",
     "build_librarian",
@@ -267,12 +278,84 @@ def shelve_repair(
         return None
 
 
-def build_librarian(settings: Settings | None = None) -> Any:
+@dataclass(frozen=True, slots=True)
+class GeminiLibrarian:
+    """The Librarian, as an ADK agent with no tools and nothing to reach.
+
+    The empty tool list is the whole security model of this agent, and it is
+    worth being explicit about why it is empty rather than minimal. The repair
+    agent needs to read and write a working tree, so it gets tools and a policy
+    engine standing over them. The Librarian needs neither: it is handed a
+    finished record as text and answers in text. Giving it one file-reading tool
+    "just in case" would put a repository in front of the only agent whose
+    output every later repository reads.
+    """
+
+    settings: Settings
+
+    def build_adk_agent(self) -> Any:
+        """The agent for one verdict. Separated so it can be asserted on."""
+        from google.adk.agents import LlmAgent
+
+        return LlmAgent(
+            name="nightshift_librarian",
+            model=self.settings.escalation_model,
+            instruction=LIBRARIAN_INSTRUCTION,
+            # Deliberately empty. See the class docstring: this is a boundary,
+            # not an omission, and a test asserts it stays that way.
+            tools=[],
+        )
+
+    def consider(self, prompt: str) -> LibrarianVerdict:
+        """One reading of one finished repair."""
+        from google.adk.runners import InMemoryRunner
+        from google.genai import types
+
+        runner = InMemoryRunner(agent=self.build_adk_agent(), app_name=APP_NAME)
+        # Derived from the prompt so a retry of the same record reuses nothing
+        # and two different records never collide. ADK session ids are opaque
+        # but must be tame, so this is a hash rather than the text.
+        session_id = "librarian-" + hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+        asyncio.run(
+            runner.session_service.create_session(
+                app_name=APP_NAME, user_id=AGENT_USER, session_id=session_id
+            )
+        )
+        try:
+            events = list(
+                runner.run(
+                    user_id=AGENT_USER,
+                    session_id=session_id,
+                    new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
+                )
+            )
+        except Exception as exc:  # the SDK's failures are not one exception type
+            raise ModelUnreachable(f"{type(exc).__name__}: {exc}"[:500]) from exc
+
+        text = final_text(events)
+        tokens = total_tokens(events)
+        # The same rule the repair agent follows, and it matters more here.
+        # ``parse_verdict`` reads anything it cannot understand as a refusal,
+        # which is the right default for a bad answer and the wrong one for no
+        # answer: an outage would be filed as "the Librarian declined", and the
+        # Ledger would look like it had considered this transition and said no.
+        if not events or (tokens == 0 and not text.strip()):
+            raise ModelUnreachable(
+                "the librarian produced no answer and no token usage; "
+                "see the SDK error logged above"
+            )
+        return parse_verdict(text, tokens_used=tokens)
+
+
+def build_librarian(settings: Settings | None = None) -> GeminiLibrarian:
     """Construct the Gemini Librarian.
 
     Pro rather than Flash: generalising is the harder judgement in the fleet and
     it happens once per *transition*, not once per repository, so it is also the
-    cheapest place to spend the better model.
+    cheapest place to spend the better model. Which model that actually is comes
+    from ``escalation_model``, so a project Vertex serves no Pro to degrades to
+    Flash here rather than losing the Librarian altogether.
     """
     settings = settings or get_settings()
-    raise NotImplementedError("librarian: build_librarian")
+    configure_backend(settings)
+    return GeminiLibrarian(settings=settings)

@@ -389,6 +389,39 @@ def probe_fleet(
 # --------------------------------------------------------------------------- #
 
 
+def wrong_platform() -> str:
+    """Refuse to measure the wrong thing. Empty string when the platform is fine.
+
+    The probe exists to predict what the fleet will do, and the fleet is a Linux
+    container built from infra/probe.Dockerfile. Run anywhere else and the
+    verdicts describe the host instead: four repositories were reported
+    UNBUILDABLE on a Windows laptop and the reasons had nothing to do with the
+    repositories — `triton` publishes no Windows wheel, and `gnureadline` says
+    outright "this module is not meant to work on Windows".
+
+    That is worse than a wrong number, because it is a wrong number that looks
+    like a finding. UNBUILDABLE reads as "this project is beyond us"; what it
+    actually said was "we asked on the wrong operating system".
+
+    An escape hatch exists because a quick single-repository run while debugging
+    is legitimate. It is a flag rather than the default, so the result is a
+    choice somebody made rather than an accident.
+    """
+    if sys.platform.startswith("linux"):
+        return ""
+    return (
+        f"the probe measures the fleet's container, and this is {sys.platform}.\n"
+        "Verdicts from here describe this machine: packages with no wheel for "
+        "your platform come back UNBUILDABLE, which reads as a fact about the "
+        "repository and is not one.\n\n"
+        "Run it in the image the fleet actually uses:\n"
+        "  docker build -f infra/probe.Dockerfile -t nightshift-probe .\n"
+        "  docker run --rm -e GITHUB_TOKEN -v \"$PWD:/app\" nightshift-probe \\\n"
+        "      python -m scripts.probe_fleet --repos fleet/probe-next.txt\n\n"
+        "Or pass --allow-host-platform if you meant to measure this machine."
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
@@ -401,7 +434,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--out", default="benchmark/cases.json")
     parser.add_argument("--limit", type=int, default=0, help="0 means no limit")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--allow-host-platform",
+        action="store_true",
+        help="probe on this machine anyway; the verdicts will describe this machine",
+    )
     args = parser.parse_args(argv)
+
+    if not args.allow_host_platform:
+        wrong = wrong_platform()
+        if wrong:
+            print(wrong, file=sys.stderr)
+            return 2
 
     load_env_file()
     logging.basicConfig(

@@ -285,3 +285,63 @@ def test_a_suite_that_is_mostly_red_is_our_environment_not_their_code() -> None:
     passing = collected - 174
     assert collected == 194
     assert passing * 2 < collected, "this is the shape that must not reach a verdict"
+
+
+def test_the_probe_refuses_to_measure_the_wrong_operating_system(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Four repositories came back UNBUILDABLE on a Windows laptop, and the
+    reasons had nothing to do with the repositories.
+
+    `triton` publishes no Windows wheel; `gnureadline` says outright "this
+    module is not meant to work on Windows". UNBUILDABLE reads as "this project
+    is beyond us" and what it actually said was "we asked on the wrong operating
+    system" — a wrong number that looks like a finding, which is worse than a
+    wrong number.
+    """
+    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(probe_fleet, "probe_fleet", _must_not_run)
+
+    code = probe_fleet.main(["--repos", str(_repo_file(tmp_path))])
+
+    assert code == 2
+    assert "probe.Dockerfile" in capsys.readouterr().err
+
+
+def _must_not_run(repos: Sequence[str]) -> list[ProbeResult]:
+    raise AssertionError("nothing may be probed from the wrong platform")
+
+
+def test_the_probe_runs_where_the_fleet_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(probe_fleet.sys, "platform", "linux")
+    assert probe_fleet.wrong_platform() == ""
+
+
+def test_measuring_this_machine_has_to_be_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quick single-repository run while debugging is legitimate. It is a flag
+    rather than the default, so the result is a choice somebody made."""
+    monkeypatch.setattr(probe_fleet.sys, "platform", "darwin")
+    message = probe_fleet.wrong_platform()
+
+    assert "--allow-host-platform" in message
+    assert "probe.Dockerfile" in message
+
+
+def test_the_escape_hatch_actually_lets_a_run_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A guard nobody can get past becomes a guard somebody deletes."""
+    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(probe_fleet, "probe_fleet", lambda repos: [])
+
+    code = probe_fleet.main(
+        [
+            "--repos",
+            str(_repo_file(tmp_path)),
+            "--out",
+            str(tmp_path / "cases.json"),
+            "--allow-host-platform",
+        ]
+    )
+
+    assert code == 0

@@ -43,7 +43,7 @@ from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import FirestoreJobStore, JobStore
 from services.worker.agent import ModelUnreachable, build_repair_agent
-from services.worker.librarian import Librarian, shelve_repair
+from services.worker.librarian import Librarian, build_librarian, shelve_repair
 from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
 from services.worker.toolchain import (
@@ -340,6 +340,25 @@ def _run(
 # one's repair.
 
 
+def _librarian(settings: Settings) -> Librarian | None:
+    """The Librarian, when the fleet can reach one.
+
+    ``None`` is a degradation and not a failure, which is why this returns
+    rather than raises: a worker that cannot generalise its repairs should still
+    make them. Losing the write path costs the fleet tomorrow's shortcut; losing
+    the repair costs it tonight's pull request, and only one of those is worth
+    failing a job over.
+
+    Built per message rather than per process because it is cheap and because a
+    long-lived worker should pick up a credential that arrives late.
+    """
+    try:
+        return build_librarian(settings)
+    except Exception:
+        log.warning("no librarian available; repairs will not be generalised", exc_info=True)
+        return None
+
+
 def on_message(message: Any, store: JobStore, settings: Settings) -> RepoJob | None:
     """Decide what happens to one message. The whole of the queueing policy.
 
@@ -366,7 +385,7 @@ def on_message(message: Any, store: JobStore, settings: Settings) -> RepoJob | N
 
     log.info("picked up %s", job.repo)
     try:
-        result = handle(job, store, settings)
+        result = handle(job, store, settings, librarian=_librarian(settings))
     except Exception:
         log.exception("%s failed outside a terminal outcome; returning it", job.repo)
         message.nack()

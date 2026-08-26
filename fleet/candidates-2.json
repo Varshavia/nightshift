@@ -1,0 +1,2920 @@
+{
+  "query": [
+    "language:python stars:100..3000 size:<50000 pushed:>2025-06-01 archived:false -topic:machine-learning -topic:deep-learning -topic:pytorch -topic:tensorflow -topic:llm -topic:awesome -topic:tutorial"
+  ],
+  "assessed": 600,
+  "requested": 600,
+  "truncated": false,
+  "accepted": [
+    {
+      "repo": "allegro/ralph",
+      "stars": 2514,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 427,
+      "size_kb": 39971,
+      "manifests": [
+        "requirements/dev.txt",
+        "requirements/test.txt",
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 13,
+      "call_path_advisories": 12,
+      "major_jump_advisories": 5,
+      "advisory_jumps": [
+        "cryptography 49.0.0 -> 50.0.0",
+        "django 4.2.30 -> 5.2.17",
+        "djangorestframework 3.15.0 -> 3.15.2",
+        "markdown 3.2.1 -> 3.8.1",
+        "pillow 11.3.0 -> 12.3.0",
+        "pymdown-extensions 10.4 -> 11.0.1",
+        "python-ldap 3.4.4 -> 3.4.5",
+        "requests 2.32.4 -> 2.33.0",
+        "setuptools 65.7.0 -> 83.0.0",
+        "social-auth-app-django 5.4.3 -> 5.6.0",
+        "sqlparse 0.5.5 -> 0.6.0",
+        "tablib 3.5.0 -> 3.10.0",
+        "werkzeug 0.16.1 -> 3.1.6"
+      ],
+      "advisory_packages": [
+        "cryptography",
+        "django",
+        "djangorestframework",
+        "markdown",
+        "pillow",
+        "pymdown-extensions",
+        "python-ldap",
+        "requests",
+        "setuptools",
+        "social-auth-app-django",
+        "sqlparse",
+        "tablib",
+        "werkzeug"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "aigc3d/LHM",
+      "stars": 2664,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 36,
+      "size_kb": 21121,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 8,
+      "call_path_advisories": 7,
+      "major_jump_advisories": 3,
+      "advisory_jumps": [
+        "diffusers 0.32.0 -> 0.38.0",
+        "gradio 4.43.0 -> 6.16.0",
+        "pillow 10.4.0 -> 12.3.0",
+        "rembg 2.0.63 -> 2.0.75",
+        "requests 2.32.3 -> 2.33.0",
+        "setuptools 74.0.0 -> 83.0.0",
+        "torch 2.3.0 -> 2.13.0",
+        "transformers 4.41.2 -> 5.5.0"
+      ],
+      "advisory_packages": [
+        "diffusers",
+        "gradio",
+        "pillow",
+        "rembg",
+        "requests",
+        "setuptools",
+        "torch",
+        "transformers"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "huggingface/picotron",
+      "stars": 2289,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 6,
+      "size_kb": 3226,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 3,
+      "call_path_advisories": 3,
+      "major_jump_advisories": 2,
+      "advisory_jumps": [
+        "datasets 2.19.1 -> 5.0.1",
+        "torch 2.1.0 -> 2.13.0",
+        "transformers 4.47.0 -> 5.5.0"
+      ],
+      "advisory_packages": [
+        "datasets",
+        "torch",
+        "transformers"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "Johnserf-Seed/f2",
+      "stars": 2620,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 19,
+      "size_kb": 6918,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 5,
+      "call_path_advisories": 3,
+      "major_jump_advisories": 1,
+      "advisory_jumps": [
+        "black 24.10.0 -> 26.3.1",
+        "click 8.1.7 -> 8.3.3",
+        "cryptography 44.0.1 -> 50.0.0",
+        "protobuf 5.28.3 -> 5.29.6",
+        "pytest 8.3.4 -> 9.0.3"
+      ],
+      "advisory_packages": [
+        "black",
+        "click",
+        "cryptography",
+        "protobuf",
+        "pytest"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "alerta/alerta",
+      "stars": 2528,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 23,
+      "size_kb": 11512,
+      "manifests": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ],
+      "actionable_advisories": 3,
+      "call_path_advisories": 3,
+      "major_jump_advisories": 1,
+      "advisory_jumps": [
+        "cryptography 46.0.6 -> 50.0.0",
+        "pyjwt 2.12.1 -> 2.13.0",
+        "requests 2.32.5 -> 2.33.0"
+      ],
+      "advisory_packages": [
+        "cryptography",
+        "pyjwt",
+        "requests"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "mjhea0/flaskr-tdd",
+      "stars": 2343,
+      "license_id": "MIT",
+      "pinned_dependencies": 7,
+      "size_kb": 521,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 4,
+      "call_path_advisories": 2,
+      "major_jump_advisories": 1,
+      "advisory_jumps": [
+        "black 23.10.0 -> 26.3.1",
+        "flask 3.0.0 -> 3.1.3",
+        "gunicorn 21.2.0 -> 22.0.0",
+        "pytest 7.4.2 -> 9.0.3"
+      ],
+      "advisory_packages": [
+        "black",
+        "flask",
+        "gunicorn",
+        "pytest"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "CravateRouge/bloodyAD",
+      "stars": 2275,
+      "license_id": "MIT",
+      "pinned_dependencies": 5,
+      "size_kb": 953,
+      "manifests": [
+        "requirements-dev.txt",
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 1,
+      "advisory_jumps": [
+        "cryptography 44.0.2 -> 50.0.0"
+      ],
+      "advisory_packages": [
+        "cryptography"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "DLLXW/baby-llama2-chinese",
+      "stars": 2923,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 1039,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 5,
+      "call_path_advisories": 4,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "pytest 7.4.0 -> 9.0.3",
+        "requests 2.31.0 -> 2.33.0",
+        "scikit-learn 1.3.0 -> 1.5.0",
+        "torch 2.0.1 -> 2.13.0",
+        "tqdm 4.64.1 -> 4.66.3"
+      ],
+      "advisory_packages": [
+        "pytest",
+        "requests",
+        "scikit-learn",
+        "torch",
+        "tqdm"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "AaronL725/grok-register",
+      "stars": 2149,
+      "license_id": "MIT",
+      "pinned_dependencies": 17,
+      "size_kb": 2929,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 5,
+      "call_path_advisories": 4,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "curl-cffi 0.13.0 -> 0.15.0",
+        "filelock 3.19.1 -> 3.20.3",
+        "idna 3.13 -> 3.15",
+        "requests 2.32.5 -> 2.33.0",
+        "urllib3 2.6.3 -> 2.7.0"
+      ],
+      "advisory_packages": [
+        "curl-cffi",
+        "filelock",
+        "idna",
+        "requests",
+        "urllib3"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "Neoteroi/BlackSheep",
+      "stars": 2358,
+      "license_id": "MIT",
+      "pinned_dependencies": 14,
+      "size_kb": 2544,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 5,
+      "call_path_advisories": 3,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "flask 3.1.1 -> 3.1.3",
+        "pyjwt 2.12.0 -> 2.13.0",
+        "pytest 8.3.5 -> 9.0.3",
+        "requests 2.32.4 -> 2.33.0",
+        "setuptools 80.7.1 -> 83.0.0"
+      ],
+      "advisory_packages": [
+        "flask",
+        "pyjwt",
+        "pytest",
+        "requests",
+        "setuptools"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "TheSmallHanCat/flow2api",
+      "stars": 2834,
+      "license_id": "MIT",
+      "pinned_dependencies": 10,
+      "size_kb": 1913,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 2,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "curl-cffi 0.7.3 -> 0.15.0",
+        "python-multipart 0.0.20 -> 0.0.31"
+      ],
+      "advisory_packages": [
+        "curl-cffi",
+        "python-multipart"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "harry0703/AudioNotes",
+      "stars": 2472,
+      "license_id": "MIT",
+      "pinned_dependencies": 11,
+      "size_kb": 814,
+      "manifests": [
+        "requirements.txt",
+        "requirements-dev.txt"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 2,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "chainlit 2.11.1 -> 2.12.0",
+        "torch 2.11.0 -> 2.13.0"
+      ],
+      "advisory_packages": [
+        "chainlit",
+        "torch"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "NovaSky-AI/SkyRL",
+      "stars": 2199,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 25,
+      "size_kb": 39910,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 2,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "hydra-core 1.3.2 -> 1.3.4",
+        "torch 2.11.0 -> 2.13.0"
+      ],
+      "advisory_packages": [
+        "hydra-core",
+        "torch"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "ByteDance-Seed/VeOmni",
+      "stars": 2173,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 31,
+      "size_kb": 22565,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 2,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "diffusers 0.37.0 -> 0.38.0",
+        "torch 2.11.0+cu130 -> 2.13.0"
+      ],
+      "advisory_packages": [
+        "diffusers",
+        "torch"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "cobrateam/splinter",
+      "stars": 2753,
+      "license_id": "BSD-3-Clause",
+      "pinned_dependencies": 5,
+      "size_kb": 4543,
+      "manifests": [
+        "requirements/test.txt"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "flask 3.0.3 -> 3.1.3",
+        "pytest 8.3.2 -> 9.0.3"
+      ],
+      "advisory_packages": [
+        "flask",
+        "pytest"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "google-research/tabfm",
+      "stars": 2550,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 65,
+      "size_kb": 383,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "setuptools 81.0.0 -> 83.0.0",
+        "torch 2.12.1+cpu -> 2.13.0"
+      ],
+      "advisory_packages": [
+        "setuptools",
+        "torch"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "luoluoluo22/jianying-editor-skill",
+      "stars": 2877,
+      "license_id": "MIT",
+      "pinned_dependencies": 11,
+      "size_kb": 24808,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "requests 2.32.5 -> 2.33.0"
+      ],
+      "advisory_packages": [
+        "requests"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "minitap-ai/mobile-use",
+      "stars": 2784,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 5,
+      "size_kb": 23881,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "python-dotenv 1.1.1 -> 1.2.2"
+      ],
+      "advisory_packages": [
+        "python-dotenv"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "django-webpack/django-webpack-loader",
+      "stars": 2540,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 9449,
+      "manifests": [
+        "requirements-dev.txt"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "django 5.2.1 -> 5.2.17"
+      ],
+      "advisory_packages": [
+        "django"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "huggingface/lighteval",
+      "stars": 2528,
+      "license_id": "MIT",
+      "pinned_dependencies": 8,
+      "size_kb": 7325,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "nltk 3.9.1 -> 3.10.0"
+      ],
+      "advisory_packages": [
+        "nltk"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "vllm-project/production-stack",
+      "stars": 2527,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 18,
+      "size_kb": 9386,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "vllm 0.13.0 -> 0.24.0"
+      ],
+      "advisory_packages": [
+        "vllm"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "fastapi-practices/fastapi-best-architecture",
+      "stars": 2522,
+      "license_id": "MIT",
+      "pinned_dependencies": 143,
+      "size_kb": 22731,
+      "manifests": [
+        "requirements.txt",
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "sqlparse 0.5.5 -> 0.6.0"
+      ],
+      "advisory_packages": [
+        "sqlparse"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "kittinan/spotify-github-profile",
+      "stars": 2206,
+      "license_id": "MIT",
+      "pinned_dependencies": 10,
+      "size_kb": 257,
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "actionable_advisories": 1,
+      "call_path_advisories": 1,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "pillow 12.2.0 -> 12.3.0"
+      ],
+      "advisory_packages": [
+        "pillow"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "jmespath/jmespath.py",
+      "stars": 2451,
+      "license_id": "MIT",
+      "pinned_dependencies": 6,
+      "size_kb": 655,
+      "manifests": [
+        "requirements.txt"
+      ],
+      "actionable_advisories": 3,
+      "call_path_advisories": 0,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "pytest 8.4.1 -> 9.0.3",
+        "setuptools 71.1.0 -> 83.0.0",
+        "wheel 0.45.1 -> 0.46.2"
+      ],
+      "advisory_packages": [
+        "pytest",
+        "setuptools",
+        "wheel"
+      ],
+      "keep": true
+    },
+    {
+      "repo": "openshift/openshift-ansible",
+      "stars": 2221,
+      "license_id": "Apache-2.0",
+      "pinned_dependencies": 8,
+      "size_kb": 43804,
+      "manifests": [
+        "test-requirements.txt"
+      ],
+      "actionable_advisories": 2,
+      "call_path_advisories": 0,
+      "major_jump_advisories": 0,
+      "advisory_jumps": [
+        "pytest 5.4.1 -> 9.0.3",
+        "setuptools 45.0.0 -> 83.0.0"
+      ],
+      "advisory_packages": [
+        "pytest",
+        "setuptools"
+      ],
+      "keep": true
+    }
+  ],
+  "rejected": [
+    {
+      "repo": "google-research/t5x",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "deepseek-ai/DualPipe",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "MeiGen-AI/MultiTalk",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Netw0rkNoob/VulnClaw",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nickrunning/wechat-selkies",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "scottlawsonbc/audio-reactive-led-strip",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "kevin1024/vcrpy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "oauthlib/oauthlib",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "SnailSploit/Claude-Red",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "TeamUltroid/Ultroid",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "erpalma/throttled",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "kislyuk/yq",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "django-mptt/django-mptt",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "YunoHost/yunohost",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "pmorissette/bt",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yybmion/public-apis-4Kr",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sigma67/ytmusicapi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ekzhu/datasketch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "snyk/agent-scan",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jschneier/django-storages",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thewhiteh4t/FinalRecon",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "wasserth/TotalSegmentator",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sunsmarterjie/yolov12",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "keleshev/schema",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "anyoptimization/pymoo",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "striver-ing/wechat-spider",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "lavie/runlike",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "microsoft/restler-fuzzer",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "yaml/pyyaml",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dooit-org/dooit",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ErlichLiu/DeepClaude",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "openrecall/openrecall",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "ciur/papermerge",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "hero8152/Infinite-Canvas",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "kayak/pypika",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jmbannon/ytdl-sub",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "NxRLab/ModernRobotics",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "rashevskyv/dbi",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "gumyr/build123d",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nunchaku-ai/ComfyUI-nunchaku",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "malinkang/weread2notion",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "ahupp/python-magic",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "binance/binance-connector-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "leggedrobotics/rsl_rl",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "deedy5/ddgs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "tiangolo/uvicorn-gunicorn-fastapi-docker",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "palahsu/DDoS-Ripper",
+      "reason": "licence MPL-2.0 does not permit this"
+    },
+    {
+      "repo": "xflux-gui/fluxgui",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "haoheliu/AudioLDM",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "holoviz/holoviews",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kurogai/100-redteam-projects",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "facebookresearch/omnilingual-asr",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "decoderesearch/circuit-tracer",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lissy93/portainer-templates",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "wemake-services/wemake-python-styleguide",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "EnhancedJax/Bagels",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "xiamuceer-j/MuMuAINovel",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "jayofelony/pwnagotchi",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Bitmessage/PyBitmessage",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Sophomoresty/gemini-web2api",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "public-clis/twitter-cli",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "cyberjunky/python-garminconnect",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "viewflow/viewflow",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "django-compressor/django-compressor",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "cdhigh/KindleEar",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "niklasf/python-chess",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "readbeyond/aeneas",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Soju06/codex-lb",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "memodb-io/memobase",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "0xType/0xProto",
+      "reason": "licence OFL-1.1 does not permit this"
+    },
+    {
+      "repo": "tfranzel/drf-spectacular",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "oxylabs/how-to-scrape-google-trends",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "UX-Decoder/Semantic-SAM",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "pypa/setuptools",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "VRSEN/OpenSwarm",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "scrapinghub/dateparser",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "AminBlg/SimpleEnglish",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "micropython/micropython-lib",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "mpquant/MyTT",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "Alfredredbird/tookie-osint",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "cdgriffith/Box",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "s3rius/FastAPI-template",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "trentm/python-markdown2",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "smartHomeHub/SmartIR",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "smithyhq/sqladmin",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "RKiding/Awesome-finance-skills",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "datachain-ai/datachain",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "gruns/furl",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "cv-cat/DouYin_Spider",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "opencve/opencve",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "chrieke/prettymapp",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "SpectrumQT/XXMI-Launcher",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "WebBreacher/WhatsMyName",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "PowerDNS-Admin/PowerDNS-Admin",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "PandaAI-Tech/panda_factor",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "huggingface/nanotron",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "KellerJordan/Muon",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "meichthys/foss_photo_libraries",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pikepdf/pikepdf",
+      "reason": "licence MPL-2.0 does not permit this"
+    },
+    {
+      "repo": "illuin-tech/colpali",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nutonomy/nuscenes-devkit",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "jinchenma94/bazi-skill",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "mnemosyne-oss/mnemosyne",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "eooce/python-ws",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Mega4alik/ollm",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "hgrecco/pint",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "meeb/tubesync",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "numz/ComfyUI-SeedVR2_VideoUpscaler",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "tensorflow/graphics",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "IndieSmiths/nodezator",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "notlikeDev/CCPlugins",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "AlexxIT/XiaomiGateway3",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fuergaosi233/claude-code-proxy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mll-lab-nu/RAGEN",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "tkem/cachetools",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bpython/bpython",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Kozea/pygal",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "google-deepmind/science-skills",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "BBuf/tvm_mlir_learn",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "yaojingang/yao-open-prompts",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "RichardAtCT/claude-code-telegram",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "ideogram-oss/ideogram4",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jazzband/django-model-utils",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pymodbus-dev/pymodbus",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "evansd/whitenoise",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ascending-llc/jarvis-registry",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yasinkuyu/binance-trader",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "Donkie/Spoolman",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "getnikola/nikola",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "netbox-community/netbox-docker",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "laixintao/iredis",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "calebmadrigal/trackerjacker",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Impact-I/reFlutter",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "PenglongHuang/chinese-novelist-skill",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "liiight/notifiers",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "echohive42/AI-reads-books-page-by-page",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "kootenpv/yagmail",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "GodsScion/Auto_job_applier_linkedIn",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "xnl-h4ck3r/waymore",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ModelTC/LightX2V",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Kaggle/docker-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Tecnativa/docker-socket-proxy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ArcSurge/Termius-Pro-zh_CN",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "sparfenyuk/mcp-proxy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "1bananachicken/MaaNTE",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "HuaYaoAI/FinGenius",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "YanjieZe/awesome-humanoid-robot-learning",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "tradermonty/claude-trading-skills",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "phillipberndt/autorandr",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "vladkens/twscrape",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Dineshkarthik/telegram_media_downloader",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dirkjanm/ROADtools",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "MetapriseAI/OrgKernel",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "palantir/python-language-server",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Nandaka/PixivUtil2",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "xdit-project/xDiT",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "rescuezilla/rescuezilla",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "facebookresearch/HyperAgents",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "elapouya/python-docx-template",
+      "reason": "licence LGPL-2.1 does not permit this"
+    },
+    {
+      "repo": "yolain/ComfyUI-Easy-Use",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "roboflow/maestro",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "BeanieODM/beanie",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "UlionTse/translators",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "cosmicpython/code",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "qibin0506/Cortex",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "patterniha/SNI-Spoofing",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "refraction-ray/xalpha",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "plbrault/youre-the-os",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "sunscrapers/djoser",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thewh1teagle/kokoro-onnx",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "django/daphne",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "HiLab-git/SSL4MIS",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "home-assistant-libs/pychromecast",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "osintbrazuca/osint-brazuca",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "cocoindex-io/cocoindex-code",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Suxiaoqinx/Netease_url",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "ilius/pyglossary",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Einsia/OpenChronicle",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "liquidctl/liquidctl",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "rthalley/dnspython",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "openai/privacy-filter",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jupyterhub/binderhub",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ankit0183/Wifi-Hacking",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Diaoul/subliminal",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "outflanknl/RedELK",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "opencardev/crankshaft",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "django-commons/django-unicorn",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "chardet/chardet",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "YusufB5/ASCILINE",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "flaskbb/flaskbb",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Syncplay/syncplay",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "zhanyong-wan/dongbei",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "google-deepmind/mctx",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bit-team/backintime",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "stanford-cs336/assignment1-basics",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ryfineZ/codex-session-patcher",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "pynamodb/PynamoDB",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "aaron-he-zhu/aaron-marketing-skills",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "arthaud/git-dumper",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "gnome-terminator/terminator",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "cve-search/cve-search",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "aasthas2022/SDE-Interview-and-Prep-Roadmap",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "joouha/euporie",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "black-forest-labs/flux2",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "xstongxue/best-skills",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "decompiler-explorer/decompiler-explorer",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pmorissette/ffn",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dateutil/dateutil",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "nolar/kopf",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thewhiteh4t/pwnedOrNot",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "anliyuan/Ultralight-Digital-Human",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "pndurette/gTTS",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "TermuxHackz/X-osint",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "rust-lang/this-week-in-rust",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "OpenStitching/stitching",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wee-slack/wee-slack",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sergree/matchering",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Yelp/mrjob",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "rbonghi/jetson_stats",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "iswbm/pycharm-guide",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "shlomi-noach/awesome-mysql",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "MrsEWE44/musicDownload",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "alibaba/tidevice",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "CamDavidsonPilon/lifelines",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Serene-Arc/bulk-downloader-for-reddit",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Ericsson/codechecker",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "centminmod/my-claude-code-setup",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "fawazahmed0/exchange-api",
+      "reason": "licence CC0-1.0 does not permit this"
+    },
+    {
+      "repo": "crowsonkb/k-diffusion",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "visa/visa-vulnerability-agentic-harness",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "bookfere/Ebook-Translator-Calibre-Plugin",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "luca-medeiros/lang-segment-anything",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "kijai/ComfyUI-HunyuanVideoWrapper",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "yandex/yandex-tank",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "presslabs/gitfs",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "python-lsp/python-lsp-server",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "6drf21e/ChatTTS_colab",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "dreamzero0/dreamzero",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "OmniSVG/OmniSVG",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "npiv/chatblade",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Red5d/docker-autocompose",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "lopopolo/harness-engineering",
+      "reason": "licence CC-BY-4.0 does not permit this"
+    },
+    {
+      "repo": "pokepetter/ursina",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Neutree/COMTool",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "CrimsonForge-io/king-phisher",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "honmashironeko/ProxyCat",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "astanin/python-tabulate",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "opensteno/plover",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "gaasedelen/lighthouse",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "sarperavci/CloudflareBypassForScraping",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "heyitsnoah/claudesidian",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Tuhinshubhra/CMSeeK",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "glomatico/gamdl",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Memento-Teams/Memento",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jiffyclub/snakeviz",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "git-cola/git-cola",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "rasterio/rasterio",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "beancount/fava",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "1rgs/nanocode",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "simonw/shot-scraper",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "YeQing17-2026/OmniAgent",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "zubair-trabzada/ai-marketing-claude",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "lgandx/PCredz",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "mewwts/addict",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Jxck-S/plane-notify",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "googlefonts/googlesans-code",
+      "reason": "licence OFL-1.1 does not permit this"
+    },
+    {
+      "repo": "onekey-sec/unblob",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "crossbario/autobahn-python",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "jazzband/Watson",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "agronholm/anyio",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "PyMySQL/mysqlclient",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "frappe/frappe_docker",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pydata/numexpr",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "chatdoc-com/OCRFlux",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jackwener/xiaohongshu-cli",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "dosisod/refurb",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "nateshmbhat/pyttsx3",
+      "reason": "licence MPL-2.0 does not permit this"
+    },
+    {
+      "repo": "samuelcolvin/watchfiles",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mitogen-hq/mitogen",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "butaixianran/Stable-Diffusion-Webui-Civitai-Helper",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mbzuai-oryx/Awesome-LLM-Post-training",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mongodb/motor",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "DidierStevens/DidierStevensSuite",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "qlustered/deepdiff",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "ehmatthes/pcc_3e",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "microsoft/ResearchStudio",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Tencent-Hunyuan/HY-Motion-1.0",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "yaojingang/yao-meta-skill",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "v0id4real/Void-Tools",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "zilliztech/memsearch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "HiDream-ai/HiDream-I1",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "mitmproxy/pdoc",
+      "reason": "licence MIT-0 does not permit this"
+    },
+    {
+      "repo": "epsylon/ufonet",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "keithrozario/Klayers",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "hbldh/bleak",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "borgbase/vorta",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "RDFLib/rdflib",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Farama-Foundation/Minigrid",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "scikit-learn-contrib/category_encoders",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "openags/paper-search-mcp",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yifan123/flow_grpo",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "BedirT/ACM-ICPC-Preparation",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "KimiNewt/pyshark",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sepandhaghighi/art",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "huggingface/tau",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "janhq/ichigo",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "napalm-automation/napalm",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "nikmcfly/MiroFish-Offline",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "CJackHwang/AIstudioProxyAPI",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "ungoogled-software/ungoogled-chromium-windows",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "fastapi/asyncer",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pyparsing/pyparsing",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "HughYau/AcademicForge",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "cocotb/cocotb",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "fhamborg/news-please",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "microsoft/PIKE-RAG",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "psycopg/psycopg",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "trailofbits/graphtage",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "pytest-dev/pytest-testinfra",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Unmanic/unmanic",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "unode/firefox_decrypt",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "24mlight/A_Share_investment_Agent",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "exercism/python",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "shengjidaguai-china/goutoujunshi",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "python-gitlab/python-gitlab",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "hydraponique/roscomvpn-routing",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "wgsxm/PartCrafter",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "terryyin/lizard",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "lorien/grab",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wsvincent/lithium",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "django-commons/django-simple-history",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "assetnote/react2shell-scanner",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "cisco-ai-defense/skill-scanner",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "markqvist/NomadNet",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "abseil/abseil-py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "karpathy/rendergit",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "uqfoundation/dill",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "test-time-training/ttt-video-dit",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Askannz/optimus-manager",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "dromara/domain-admin",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "munki/macadmin-scripts",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "baaivision/Emu3",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "justquick/django-activity-stream",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dirkjanm/BloodHound.py",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Anning01/AIMedia",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "ShinMegamiBoson/OpenPlanter",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "aws/agent-toolkit-for-aws",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "shenweichen/DeepMatch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "open-webui/pipelines",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jherrodthomas/automotive-skills-suite",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "omry/omegaconf",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "eclipse-paho/paho.mqtt.python",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "olivierkes/manuskript",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "sodadata/soda-core",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "hastagAB/Awesome-Python-Scripts",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "codespell-project/codespell",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "SCons/scons",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "julien-duponchelle/python-mysql-replication",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "kurtmckee/feedparser",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "LoRexxar/Kunlun-M",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "aolofsson/awesome-opensource-hardware",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "fivetaku/insane-search",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ChrispyBacon-dev/DockFlare",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "OpenBMB/CPM-Bee",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "landing-ai/ade-cli",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "miguelgrinberg/Flask-Migrate",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mavlink/mavlink",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "CodeXBotz/File-Sharing-Bot",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "ariebovenberg/whenever",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "PyWavelets/pywt",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Django-CRM/Django-CRM",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "QuantEcon/QuantEcon.py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "softaworks/agent-toolkit",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jazzband/django-push-notifications",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "xhtml2pdf/xhtml2pdf",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ArgeliusLabs/Chasing-Your-Tail-NG",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "openairplay/airplay2-receiver",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "jingyaogong/minimind-o",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "earendil-works/absurd",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "BigDawnGhost/wenyi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "gawel/pyquery",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "hisxo/gitGraber",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "JacquesLucke/animation_nodes",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "Cicada000/VV",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "mac-cleanup/mac-cleanup-py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "shepherd-agents/shepherd",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "knowsuchagency/mcp2cli",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "zai-org/GLM-V",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Meekdai/Gmeek",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "agronholm/sqlacodegen",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "apify/agent-skills",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "MasoniteFramework/masonite",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dusklinux/dusky",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jorhelp/Ingram",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "jtpereyda/boofuzz",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "Observal/Observal",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "FifiTheBulldog/ios-settings-urls",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "kmmbvnr/django-fsm",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "vitiko98/qobuz-dl",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "nicoboss/nsz",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "matthewwithanm/django-imagekit",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "next-1688/1688-shopkeeper",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "mcordts/cityscapesScripts",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "HybridRobotics/whole_body_tracking",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "mirumee/ariadne",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "romainsimon/paperasse",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "elementalsouls/Claude-OSINT",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "AabyssZG/SpringBoot-Scan",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "AGI-Edgerunners/LLM-Agents-Papers",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "MaxMiksa/Auto-Company",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "anufrievroman/calcure",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "DestinyLinker/MingLi-Bench",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jellyfin/jellyfin-mpv-shim",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "zostera/django-bootstrap3",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "FrancyJGLisboa/agent-skill-creator",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "bugcrowd/HUNT",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "facebookresearch/schedule_free",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "open-thoughts/open-thoughts",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "PKU-YuanGroup/MoE-LLaVA",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "vearch/vearch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "moderngl/moderngl",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "vmware/pyvmomi",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dataabc/weibo-search",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "borgmatic-collective/borgmatic",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "p0dalirius/Coercer",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "greghesp/ha-bambulab",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "pyusb/pyusb",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "frappe/builder",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kijai/ComfyUI-SUPIR",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "themix-project/themix-gui",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "warproxxx/poly_data",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "victorchen96/deepseek_v4_rolepaly_instruct",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "taskiq-python/taskiq",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ldrolez/free-midi-chords",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "XiaomiMiMo/MiMo",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Matoking/protontricks",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Exa-Networks/exabgp",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "securo-finance/securo",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "GrahamDumpleton/wrapt",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "OpenHelix-Team/VLA-Adapter",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "bigb0sss/RedTeam-OffensiveSecurity",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "HKUDS/FastCode",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "samuelgursky/davinci-resolve-mcp",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "randy3k/radian",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lhfer/claude-howto-zh-cn",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "numba/llvmlite",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "financial-datasets/mcp-server",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jupyter/nbviewer",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "winpython/winpython",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "testcontainers/testcontainers-python",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "eliben/pyelftools",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "cantools/cantools",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Suor/django-cacheops",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "jelmer/dulwich",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "perkfly/ex-skill",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "aixcoder-plugin/aiXcoder-7B",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "badabing2005/PixelFlasher",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "vintasoftware/django-react-boilerplate",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "smittix/intercept",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wemake-services/wemake-django-template",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "OpenDCAI/DataFlex",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "josiahcarlson/redis-in-action",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "qhjqhj00/MemoRAG",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "geeklee/srt-whiteboard-animation",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pyscaffold/pyscaffold",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "nv-tlabs/lyra",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "pypa/cibuildwheel",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "agno-agi/dash",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "THU-MIG/yoloe",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "langfengQ/verl-agent",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Tencent/MedicalNet",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "ying-ck/fanqienovel-downloader",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "leo-lilinxiao/codex-autoresearch",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "GuDong2003/xianyu-auto-reply-fix",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "zhaoolee/ins",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "pypa/flit",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "xbpeng/MimicKit",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jennyzzt/dgm",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "K-Dense-AI/claude-scientific-writer",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "guy-hartstein/company-research-agent",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "facebookresearch/fvcore",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "spyboy-productions/CloakQuest3r",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "h5py/h5py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "rushindrasinha/youtube-shorts-pipeline",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "dsphper/lanhu-mcp",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "wooey/Wooey",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "andikleen/pmu-tools",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "coleam00/mcp-crawl4ai-rag",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "matthewwithanm/python-markdownify",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "veops/cmdb",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "GalTransl/GalTransl",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "suitenumerique/meet",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Wirasm/prp",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "codejunkie99/agentic-stack",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mgechev/skills-best-practices",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "python-restx/flask-restx",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "python-rope/rope",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "custom-components/ble_monitor",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "AmberLJC/LLMSys-PaperList",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "dou-jiang/codex-console",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Amulet-Team/Amulet-Map-Editor",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "alecmuffett/real-world-onion-sites",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "DanOps-1/Gpt-Agreement-Payment",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ellisdg/3DUnetCNN",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ai-christianson/RA.Aid",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "titoBouzout/SideBarEnhancements",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "wang2122/sprix-sage-router",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "bcefghj/ai-agent-interview-guide",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "comeonzhj/Auto-Redbook-Skills",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "zakirkun/deep-eye",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "ross/requests-futures",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "VermiIIi0n/fuckZHS",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "punk-security/dnsReaper",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "nielsfaber/alarmo",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "eeeeeeeeee-code/e0e1-wx",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "fly8888/cursor_machine_id",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "login-securite/lsassy",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "yynxxxxx/Codex-5.5-codex-instruct-5.5",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "aigc-apps/VideoX-Fun",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "MikeWang000000/Natter",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "python-excel/xlrd",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "mrgoonie/claudekit-skills",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "pygments/pygments",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "invoice-x/invoice2data",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ReaJason/xhs",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thuml/iTransformer",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "tobgu/pyrsistent",
+      "reason": "2 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "deviantfero/wpgtk",
+      "reason": "licence GPL-2.0 does not permit this"
+    },
+    {
+      "repo": "TengerTechnologies/Bricklayers",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Yggdroot/LeaderF",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "skorokithakis/shortuuid",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "TransWithAI/Faster-Whisper-TransWithAI-ChickenRice",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "slavakurilyak/awesome-ai-agents",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "LigphiDonk/academic-figure-generator",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "NixOS/nixops",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "agentstack-ai/AgentStack",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "SergeyPirogov/webdriver_manager",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Owez/yark",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "brightbeanxyz/brightbean-studio",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "mandiant/flare-fakenet-ng",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sun-guannan/VectCutAPI",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "piccolomo/plotext",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "zengyh1900/Awesome-Image-Inpainting",
+      "reason": "licence unknown does not permit this"
+    },
+    {
+      "repo": "ningzimu/image-to-editable-ppt-skill",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "phuryn/claude-usage",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "thingsboard/thingsboard-gateway",
+      "reason": "1 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "ramnes/notion-sdk-py",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "WoeUSB/WoeUSB-ng",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "alejandroautalan/pygubu",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "sirfz/tesserocr",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "widgetti/solara",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "lenucksi/aur-malware-check",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "Alir3z4/html2text",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "MineDojo/NitroGen",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "moses-palmer/pynput",
+      "reason": "licence LGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "tmbo/questionary",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "alexbers/mtprotoproxy",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "jazzband/django-widget-tweaks",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "mahmoud/glom",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "op7418/Youtube-clipper-skill",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "simonw/sqlite-utils",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "UnkL4b/GitMiner",
+      "reason": "licence GPL-3.0 does not permit this"
+    },
+    {
+      "repo": "castorini/pyserini",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "Sumandora/remove-refusals-with-transformers",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "emcf/engshell",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Taxel/PlexTraktSync",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "sashs/Ropper",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "rupeshs/fastsdcpu",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "Rongronggg9/RSS-to-Telegram-Bot",
+      "reason": "licence AGPL-3.0 does not permit this"
+    },
+    {
+      "repo": "thinkst/canarytokens",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "python-social-auth/social-app-django",
+      "reason": "no advisory with a published fix against its current pins; there would be nothing for the fleet to upgrade"
+    },
+    {
+      "repo": "miguelgrinberg/microdot",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    },
+    {
+      "repo": "kainctl/isd",
+      "reason": "licence NOASSERTION does not permit this"
+    },
+    {
+      "repo": "D4Vinci/Cr3dOv3r",
+      "reason": "no test suite, so nothing can serve as evidence of a repair"
+    },
+    {
+      "repo": "gpiozero/gpiozero",
+      "reason": "0 exact pins; libraries declare ranges and a range has no version to ask OSV about"
+    }
+  ]
+}
