@@ -73,18 +73,38 @@ say() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
 # --------------------------------------------------------------------------- #
 # APIs
 # --------------------------------------------------------------------------- #
-say "enabling APIs"
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  pubsub.googleapis.com \
-  cloudscheduler.googleapis.com \
-  firestore.googleapis.com \
-  artifactregistry.googleapis.com \
-  aiplatform.googleapis.com \
-  secretmanager.googleapis.com \
-  cloudtrace.googleapis.com \
-  --project "$PROJECT" --quiet
+REQUIRED_APIS=(
+  run.googleapis.com
+  cloudbuild.googleapis.com
+  pubsub.googleapis.com
+  cloudscheduler.googleapis.com
+  firestore.googleapis.com
+  artifactregistry.googleapis.com
+  aiplatform.googleapis.com
+  secretmanager.googleapis.com
+  cloudtrace.googleapis.com
+)
+
+# Read first, and enable only what is missing.
+#
+# `gcloud services enable` on an API that is already on is still a mutation, and
+# mutations are rated per minute against whichever project is paying for the
+# call — in Cloud Shell that is Cloud Shell's project, shared with everybody
+# else on it. Re-enabling nine APIs on every deployment spent that budget on
+# nothing and eventually refused to deploy at all: RESOURCE_EXHAUSTED against a
+# project number that is not even ours.
+#
+# Idempotent was always the claim. This makes the common path cost one read.
+say "checking APIs"
+enabled="$(gcloud services list --enabled --project "$PROJECT" --format='value(config.name)')"
+missing=()
+for api in "${REQUIRED_APIS[@]}"; do
+  grep -qx "$api" <<<"$enabled" || missing+=("$api")
+done
+if (( ${#missing[@]} )); then
+  say "enabling ${#missing[@]} API(s): ${missing[*]}"
+  gcloud services enable "${missing[@]}" --project "$PROJECT" --quiet
+fi
 
 # --------------------------------------------------------------------------- #
 # Service accounts — one per service, each with only what it uses
