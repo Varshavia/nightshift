@@ -9,6 +9,7 @@ is not something a future refactor gets to drop quietly.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -18,11 +19,14 @@ from nightshift_core.policy import Decision, PolicyEngine, ToolCall
 from services.worker.toolchain import Sandbox, diff_stats
 
 __all__ = [
+    "IDENTITY",
     "PR_TEMPLATE_PATH",
     "GitHubClient",
     "PullRequestBlocked",
     "PyGithubClient",
     "open_pr",
+    "open_pull_for",
+    "rejected_as_behind",
     "render_pr_body",
 ]
 
@@ -120,10 +124,39 @@ class PyGithubClient:
 
     def create_pull_request(self, repo: str, head: str, title: str, body: str) -> str:
         repository = self.github.get_repo(repo)
-        pull = repository.create_pull(
-            title=title, body=body, head=head, base=repository.default_branch
-        )
+        try:
+            pull = repository.create_pull(
+                title=title, body=body, head=head, base=repository.default_branch
+            )
+        except Exception:
+            # GitHub refuses a second pull request for the same head, and a job
+            # that is redelivered arrives at exactly that. The pull request it
+            # opened the first time is the answer to this job, not an error: the
+            # work is done and the url exists. Raising instead would put the job
+            # back on the queue to fail the same way for ever.
+            existing = open_pull_for(repository, head)
+            if existing is None:
+                raise
+            log.info("a pull request for %s is already open; keeping it", head)
+            return existing
         return str(pull.html_url)
+
+
+#: git's several ways of saying "the remote has something you do not".
+_REJECTED = re.compile(r"fetch first|non-fast-forward|Updates were rejected", re.IGNORECASE)
+
+
+def rejected_as_behind(stderr: str) -> bool:
+    """Was the push refused because the branch is already on the remote?"""
+    return bool(_REJECTED.search(stderr))
+
+
+def open_pull_for(repository: Any, head: str) -> str | None:
+    """The url of the open pull request for ``head``, if there is one."""
+    owner = str(repository.owner.login)
+    for pull in repository.get_pulls(state="open", head=f"{owner}:{head}"):
+        return str(pull.html_url)
+    return None
 
 
 #: Who the fleet commits as, supplied on the command rather than written into
@@ -204,6 +237,20 @@ def open_pr(
 
     if settings.github_token:
         pushed = sandbox.run(["git", "push", "origin", branch], timeout=GIT_TIMEOUT)
+        if pushed.returncode != 0 and rejected_as_behind(pushed.stderr):
+            # The branch is ours by construction: our prefix, the package, the
+            # fixed version and this run's id. Nobody else writes that name, so
+            # what is on the remote is an earlier attempt at this same job that
+            # pushed and then died before it could record an outcome — four of
+            # them in one night, each one blocking the retry that would have
+            # finished the work.
+            #
+            # Not `main`, and not a branch anyone is working on. Replacing our
+            # own leftover is the only way a redelivered job can ever finish.
+            log.warning("%s is already on the remote; replacing our earlier attempt", branch)
+            pushed = sandbox.run(
+                ["git", "push", "--force", "origin", branch], timeout=GIT_TIMEOUT
+            )
         if pushed.returncode != 0:
             raise RuntimeError(f"push failed: {pushed.stderr[-500:]}")
     else:

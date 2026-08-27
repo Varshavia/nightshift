@@ -5,9 +5,17 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from services.worker.pull_request import IDENTITY, PullRequestBlocked, open_pr
+from services.worker.pull_request import (
+    IDENTITY,
+    PullRequestBlocked,
+    PyGithubClient,
+    open_pr,
+    open_pull_for,
+    rejected_as_behind,
+)
 from services.worker.toolchain import Sandbox
 
 from nightshift_core.config import Settings
@@ -201,3 +209,123 @@ def test_auto_merge_is_not_reachable(sandbox: Sandbox) -> None:
         ToolCall("open_pull_request", {"repo": "nightshift-fleet/example", "auto_merge": True})
     )
     assert decision.rule == "no-auto-merge"
+
+
+# --------------------------------------------------------------------------- #
+# A job that comes back round
+#
+# A redelivered job repeats work it may have already finished. The branch name
+# is deterministic by design — our prefix, the package, the fixed version, this
+# run's id — so the second attempt pushes straight into whatever the first one
+# left behind, and four repositories in one night died on "fetch first" after
+# the expensive part was already paid for.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "! [rejected] nightshift/black-26.3.1-220afca9 (fetch first)",
+        "! [rejected] nightshift/pyjwt-2.13.0-220afca9 (non-fast-forward)",
+        "hint: Updates were rejected because the remote contains work that you do not",
+    ],
+)
+def test_a_push_refused_for_being_behind_is_recognised(stderr: str) -> None:
+    """git says this three different ways and the fleet met all three."""
+    assert rejected_as_behind(stderr)
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "remote: Permission to Varshavia/x.git denied",
+        "fatal: could not read Username for 'https://github.com'",
+        "error: failed to push some refs: unable to access, connection reset",
+    ],
+)
+def test_a_push_refused_for_any_other_reason_is_not(stderr: str) -> None:
+    """A denied credential must never be answered with a force push. The rule
+    is narrow on purpose: replacing a branch is only safe when the reason we
+    cannot write to it is that we already did."""
+    assert not rejected_as_behind(stderr)
+
+
+class FakePull:
+    def __init__(self, url: str) -> None:
+        self.html_url = url
+
+
+class FakeRepository:
+    """A GitHub repository reduced to what opening a pull request touches."""
+
+    def __init__(self, *, already_open: str | None = None) -> None:
+        self.owner = SimpleNamespace(login="Varshavia")
+        self.default_branch = "main"
+        self._already_open = already_open
+        self.asked_for: list[str] = []
+
+    def create_pull(self, **kwargs: object) -> FakePull:
+        if self._already_open is not None:
+            # What GitHub actually answers, as a 422.
+            raise RuntimeError("A pull request already exists for Varshavia:nightshift/x")
+        return FakePull("https://github.com/Varshavia/x/pull/9")
+
+    def get_pulls(self, *, state: str, head: str) -> list[FakePull]:
+        self.asked_for.append(head)
+        return [FakePull(self._already_open)] if self._already_open else []
+
+
+class FakeGithub:
+    def __init__(self, repository: FakeRepository) -> None:
+        self._repository = repository
+
+    def get_repo(self, name: str) -> FakeRepository:
+        return self._repository
+
+
+def client_for(repository: FakeRepository) -> PyGithubClient:
+    client = PyGithubClient(token="not-a-real-token")
+    # The lazily-built handle, set rather than built: constructing the real one
+    # needs a network and a credential, and neither is what this asserts.
+    client._github = FakeGithub(repository)
+    return client
+
+
+def test_the_head_is_qualified_by_owner_when_asking_what_is_open() -> None:
+    """GitHub reads a bare branch name as belonging to the repository being
+    queried, which is not always where the branch is. Unqualified, the lookup
+    quietly finds nothing and the caller concludes there is no pull request."""
+    repository = FakeRepository()
+
+    assert open_pull_for(repository, "nightshift/black-26.3.1") is None
+    assert repository.asked_for == ["Varshavia:nightshift/black-26.3.1"]
+
+
+def test_a_job_that_comes_back_keeps_the_pull_request_it_already_opened() -> None:
+    """The url is the answer to this job, and it exists. Raising would return
+    the job to the queue to fail identically for as long as it is retried,
+    while the pull request it earned sits open and uncounted."""
+    repository = FakeRepository(already_open="https://github.com/Varshavia/x/pull/3")
+
+    url = client_for(repository).create_pull_request(
+        repo="Varshavia/x", head="nightshift/black-26.3.1", title="t", body="b"
+    )
+
+    assert url == "https://github.com/Varshavia/x/pull/3"
+
+
+def test_a_refusal_with_nothing_open_behind_it_still_raises() -> None:
+    """Only a duplicate is forgiven. Anything else — a revoked token, a
+    protected branch, a repository that has gone away — is a real failure and
+    swallowing it would file an outage as a finished job."""
+    repository = FakeRepository()
+    repository._already_open = None
+
+    class AlwaysRefuses(FakeRepository):
+        def create_pull(self, **kwargs: object) -> FakePull:
+            raise RuntimeError("Resource not accessible by integration")
+
+    with pytest.raises(RuntimeError, match="not accessible"):
+        client_for(AlwaysRefuses()).create_pull_request(
+            repo="Varshavia/x", head="nightshift/black-26.3.1", title="t", body="b"
+        )
