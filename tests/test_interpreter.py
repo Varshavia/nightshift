@@ -15,6 +15,7 @@ import pytest
 from services.worker import interpreter
 from services.worker.interpreter import (
     CANDIDATES,
+    bounded_above,
     choose_interpreter,
     declared_requirement,
 )
@@ -139,3 +140,29 @@ def test_the_candidates_are_ordered_newest_first() -> None:
     assert tuple(
         sorted(CANDIDATES, key=lambda v: [int(part) for part in v.split(".")], reverse=True)
     ) == CANDIDATES
+
+
+def test_an_open_ended_requirement_rules_out_nothing_in_the_future() -> None:
+    """`bonobo` publishes `>=3.5`, written when "later" meant 3.7.
+
+    Read as a claim that 3.12 works it produced forty-one collection errors and
+    one passing test. A lower bound says which interpreters are too old and
+    nothing at all about which are too new, and the difference decides whether
+    the fleet is allowed a second attempt.
+    """
+    assert not bounded_above(">=3.5")
+    assert not bounded_above(">=3.9")
+
+
+def test_a_ceiling_is_an_answer_and_is_respected() -> None:
+    """A project that names an upper bound has been given what it asked for."""
+    assert bounded_above(">=3.8,<3.10")
+    assert bounded_above("==3.9.*")
+    assert bounded_above("~=3.11")
+    assert bounded_above("<3.13")
+
+
+def test_a_requirement_nobody_can_parse_is_not_treated_as_a_ceiling() -> None:
+    """A typo must cost the fleet a better interpreter, never a second attempt
+    it would otherwise have been allowed."""
+    assert not bounded_above("not a specifier")

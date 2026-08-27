@@ -46,6 +46,7 @@ from services.worker.agent import ModelUnreachable, build_repair_agent
 from services.worker.interpreter import (
     FALLBACK,
     InterpreterChoice,
+    bounded_above,
     declared_requirement,
     resolve,
 )
@@ -175,11 +176,17 @@ def _job_store(settings: Settings) -> JobStore:
 def older_interpreter(repo_path: Path) -> InterpreterChoice | None:
     """The second rung, or None when there is not one.
 
-    Only for a repository that declared nothing. A project that states a range
-    has already been given what it asked for, and reaching outside that range is
+    Only when the repository has not ruled this out. A project that publishes an
+    upper bound has been given what it asked for, and reaching past that bound is
     not a second attempt — it is ignoring the answer.
+
+    An open-ended `>=3.5`, though, rules nothing out: it was written when "later"
+    meant 3.7 and it says which interpreters are too old, not which are too new.
+    `bonobo` carries exactly that, was handed 3.12 on the strength of it, and
+    came back with forty-one collection errors.
     """
-    if declared_requirement(repo_path)[0]:
+    requirement = declared_requirement(repo_path)[0]
+    if requirement and bounded_above(requirement):
         return None
     python = resolve(FALLBACK)
     if python is None:
