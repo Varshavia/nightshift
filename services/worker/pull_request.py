@@ -126,6 +126,27 @@ class PyGithubClient:
         return str(pull.html_url)
 
 
+#: Who the fleet commits as, supplied on the command rather than written into
+#: the clone or the image.
+#:
+#: `git commit` refuses to run without an identity, and a container has none:
+#: fifty-one repositories in one night were cloned, built, measured, upgraded,
+#: tested and then lost on this line — "Author identity unknown" — after all the
+#: expensive work was already done. Every one of them was a pull request the
+#: fleet had earned.
+#:
+#: `-c` rather than `git config`, because a worker builds many clones in one
+#: container and a configured identity is shared state the next repository
+#: inherits without asking. Rather than the image, because the image is not
+#: where anyone looks when a commit has no author, and a test cannot assert it.
+IDENTITY = (
+    "-c",
+    "user.name=Nightshift",
+    "-c",
+    "user.email=nightshift@users.noreply.github.com",
+)
+
+
 def open_pr(
     job: RepoJob,
     sandbox: Sandbox,
@@ -167,7 +188,15 @@ def open_pr(
     for argv in (
         ["git", "checkout", "-b", branch],
         ["git", "add", "-A"],
-        ["git", "commit", "-m", title, "-m", "Opened by Nightshift, an autonomous agent fleet."],
+        [
+            "git",
+            *IDENTITY,
+            "commit",
+            "-m",
+            title,
+            "-m",
+            "Opened by Nightshift, an autonomous agent fleet.",
+        ],
     ):
         result = sandbox.run(argv, timeout=GIT_TIMEOUT)
         if result.returncode != 0:

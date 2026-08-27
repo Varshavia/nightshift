@@ -9,6 +9,7 @@ project's central claim is wrong, so it gets its own tests.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,6 +24,14 @@ from scripts.probe_fleet import (
 from services.worker.toolchain import TestReport, collection_counts, failing_ids
 
 from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
+
+#: These tests stub the prober out, so what they exercise is argument handling
+#: and output — this machine is exactly what they mean to measure. Said with the
+#: flag rather than by leaving the guard out of their way, because the guard
+#: exists to make measuring the host a decision somebody made on purpose. It was
+#: added on Linux and turned four of these red on the Windows machine the team
+#: develops on, which is its own small lesson about where a suite gets run.
+HOST = ["--allow-host-platform"]
 
 
 def _result(verdict: ProbeVerdict, repo: str = "a/b", **kwargs: object) -> ProbeResult:
@@ -146,7 +155,7 @@ def test_the_probe_reads_the_reviewed_pool_by_default(
     monkeypatch.setattr(probe_fleet, "probe_fleet", record)
 
     probe_fleet.main(
-        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json")]
+        ["--pool", str(tmp_path / "pool.json"), "--out", str(tmp_path / "cases.json"), *HOST]
     )
 
     assert seen == [["me/service"]]
@@ -155,7 +164,7 @@ def test_the_probe_reads_the_reviewed_pool_by_default(
 def test_a_missing_pool_says_how_to_build_one(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json")])
+    code = probe_fleet.main(["--pool", str(tmp_path / "absent.json"), *HOST])
 
     assert code == 2
     assert "build_fork_pool.py" in capsys.readouterr().err
@@ -180,7 +189,7 @@ def test_every_verdict_is_written_down_not_only_the_breaking_ones(
     )
     out = tmp_path / "cases.json"
 
-    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out)])
+    probe_fleet.main(["--repos", str(_repo_file(tmp_path)), "--out", str(out), *HOST])
 
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["cases"] == []
@@ -197,7 +206,7 @@ def test_an_unmeasured_break_rate_does_not_read_as_zero(
     )
 
     probe_fleet.main(
-        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json")]
+        ["--repos", str(_repo_file(tmp_path)), "--out", str(tmp_path / "cases.json"), *HOST]
     )
 
     assert "unmeasured rather than zero" in capsys.readouterr().out
@@ -299,7 +308,7 @@ def test_the_probe_refuses_to_measure_the_wrong_operating_system(
     system" — a wrong number that looks like a finding, which is worse than a
     wrong number.
     """
-    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(probe_fleet, "probe_fleet", _must_not_run)
 
     code = probe_fleet.main(["--repos", str(_repo_file(tmp_path))])
@@ -313,14 +322,14 @@ def _must_not_run(repos: Sequence[str]) -> list[ProbeResult]:
 
 
 def test_the_probe_runs_where_the_fleet_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(probe_fleet.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     assert probe_fleet.wrong_platform() == ""
 
 
 def test_measuring_this_machine_has_to_be_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
     """A quick single-repository run while debugging is legitimate. It is a flag
     rather than the default, so the result is a choice somebody made."""
-    monkeypatch.setattr(probe_fleet.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     message = probe_fleet.wrong_platform()
 
     assert "--allow-host-platform" in message
@@ -331,7 +340,7 @@ def test_the_escape_hatch_actually_lets_a_run_through(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A guard nobody can get past becomes a guard somebody deletes."""
-    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(probe_fleet, "probe_fleet", lambda repos: [])
 
     code = probe_fleet.main(

@@ -49,6 +49,17 @@ RUN apt-get update \
 # pyproject declares no `readme`, so the file is not strictly required to
 # install — it is copied anyway because a build that breaks the moment somebody
 # adds one line to pyproject is not worth the saved second.
+# `uv`, for one job: fetching the interpreter a repository asked for. The image
+# ships 3.12 and a great many projects pinned before 2023 cannot be installed
+# with it — 3.12 removed `distutils`, and their `setup.py` imports it. Offering
+# every repository the same Python and recording UNBUILDABLE is a measurement of
+# this container, not of them. See services/worker/interpreter.py.
+#
+# Copied from the published image rather than curl-piped into a shell: the
+# deployment already trusts a registry, and it should not also have to trust a
+# script fetched at build time.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+
 COPY pyproject.toml README.md ./
 COPY packages/ packages/
 RUN pip install -e .

@@ -24,7 +24,6 @@ Both are pure and both are covered.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import re
@@ -36,9 +35,9 @@ from nightshift_core.config import Settings, get_settings
 from nightshift_core.ledger import MigrationLedger, MigrationScope, Recipe
 from nightshift_core.models import RepairAttempt, RepoJob
 from services.worker.agent import (
-    AGENT_USER,
     APP_NAME,
     ModelUnreachable,
+    collect_events,
     configure_backend,
     final_text,
     total_tokens,
@@ -309,28 +308,15 @@ class GeminiLibrarian:
     def consider(self, prompt: str) -> LibrarianVerdict:
         """One reading of one finished repair."""
         from google.adk.runners import InMemoryRunner
-        from google.genai import types
 
         runner = InMemoryRunner(agent=self.build_adk_agent(), app_name=APP_NAME)
         # Derived from the prompt so a retry of the same record reuses nothing
         # and two different records never collide. ADK session ids are opaque
         # but must be tame, so this is a hash rather than the text.
         session_id = "librarian-" + hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
-        asyncio.run(
-            runner.session_service.create_session(
-                app_name=APP_NAME, user_id=AGENT_USER, session_id=session_id
-            )
-        )
-        try:
-            events = list(
-                runner.run(
-                    user_id=AGENT_USER,
-                    session_id=session_id,
-                    new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
-                )
-            )
-        except Exception as exc:  # the SDK's failures are not one exception type
-            raise ModelUnreachable(f"{type(exc).__name__}: {exc}"[:500]) from exc
+        # The same single-loop rule the repair agent follows, and for the same
+        # reason: this runs in the same long-lived process, after it.
+        events = collect_events(runner, session_id=session_id, prompt=prompt)
 
         text = final_text(events)
         tokens = total_tokens(events)

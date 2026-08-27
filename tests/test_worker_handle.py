@@ -129,6 +129,32 @@ def test_a_suite_that_collects_nothing_is_unbuildable(patched: pytest.MonkeyPatc
     assert "collected no tests" in job.notes
 
 
+def test_a_runner_that_will_not_start_is_not_returned_to_the_queue(
+    patched: pytest.MonkeyPatch,
+) -> None:
+    """Exit 3 and exit 4 used to be INFRA_ERROR, which is nacked on purpose.
+
+    Two repositories produced one on every delivery, for as long as the fleet
+    had been running: a container, a clone and a full environment build each
+    time, to reach the same conclusion, while everything behind them waited.
+    Thirty-one of fifty-two finished jobs in a single night were this.
+
+    A verdict a retry cannot change belongs to the repository, and the queue has
+    to be allowed to let go of it.
+    """
+    patched.setattr(
+        worker,
+        "run_tests",
+        lambda sandbox, **kw: TestReport(
+            passed=False, output="", duration_seconds=0.1, exit_code=3
+        ),
+    )
+    job = run()
+
+    assert job.outcome is Outcome.UNBUILDABLE, "INFRA_ERROR would put it back on the queue"
+    assert "exit 3" in job.notes, "the reason has to survive into the record"
+
+
 def test_a_suite_where_nothing_passes_stops_before_any_upgrade(
     patched: pytest.MonkeyPatch,
 ) -> None:

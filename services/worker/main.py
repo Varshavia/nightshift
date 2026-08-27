@@ -248,7 +248,22 @@ def _run(
     baseline = run_tests(sandbox)
     job.baseline_green = baseline.passed
     if baseline.internal_error:
-        return finish(Outcome.INFRA_ERROR, notes=f"pytest exit {baseline.exit_code}")
+        # Not INFRA_ERROR, which is nacked and comes straight back. `AIF360` and
+        # `flask-security` returned exit 3 and exit 4 on every delivery for as
+        # long as the fleet has been running, each one costing a full container
+        # and a full environment build, while other repositories waited behind
+        # them. Thirty-one of fifty-two finished jobs in one night were this.
+        #
+        # Same shape as "collected no tests", and the same answer: an outcome we
+        # already have, with a note that says which one, rather than a new enum
+        # member. See docs/decisions/0003.
+        return finish(
+            Outcome.UNBUILDABLE,
+            notes=(
+                f"pytest exit {baseline.exit_code}: the repository's own test "
+                "runner would not start here"
+            ),
+        )
     if not baseline.collected:
         # No tests means the suite cannot serve as evidence that a repair worked.
         # Reported as UNBUILDABLE with an explicit note rather than given its own
@@ -472,7 +487,8 @@ def consume(
     Renewing that by hand and forgetting to would hand the same repository to a
     second worker halfway through the first one's repair.
     """
-    from google.cloud import pubsub_v1
+    # An implicit namespace package mypy cannot follow into; see the scanner.
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 
     settings = settings or get_settings()
     settings.require_cloud()

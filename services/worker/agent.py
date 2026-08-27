@@ -31,6 +31,7 @@ __all__ = [
     "GeminiRepairAgent",
     "ModelUnreachable",
     "build_repair_agent",
+    "collect_events",
     "configure_backend",
     "final_text",
     "proposal_from",
@@ -234,30 +235,59 @@ class GeminiRepairAgent:
     def attempt(self, context: RepairContext, tools: SandboxTools) -> RepairProposal:
         """One turn of the loop. The suite, not this method, decides success."""
         from google.adk.runners import InMemoryRunner
-        from google.genai import types
 
         runner = InMemoryRunner(agent=self.build_adk_agent(context.attempt, tools),
                                 app_name=APP_NAME)
-        session_id = _session_id(context)
-        asyncio.run(
-            runner.session_service.create_session(
-                app_name=APP_NAME, user_id=AGENT_USER, session_id=session_id
-            )
+        events: Sequence[Any] = collect_events(
+            runner,
+            session_id=_session_id(context),
+            prompt=render_attempt_prompt(context),
         )
-        try:
-            events: Sequence[Any] = list(
-                runner.run(
-                    user_id=AGENT_USER,
-                    session_id=session_id,
-                    new_message=types.Content(
-                        role="user", parts=[types.Part(text=render_attempt_prompt(context))]
-                    ),
-                )
-            )
-        except Exception as exc:  # the SDK's failures are not one exception type
-            raise ModelUnreachable(f"{type(exc).__name__}: {exc}"[:500]) from exc
-
         return proposal_from(events)
+
+
+def collect_events(runner: Any, *, session_id: str, prompt: str) -> list[Any]:
+    """Open the session and read the whole answer inside one event loop.
+
+    The fleet asked a model about a real repository exactly once — `f2`, the
+    only repository in fifty-seven that ever reached the upgrade with a usable
+    baseline — and got back no answer and no tokens. Under it, in the container
+    log, was ``RuntimeError: cannot schedule new futures after interpreter
+    shutdown``, thrown while the SDK was minting its access token.
+
+    The cause was here. ADK's synchronous ``Runner.run`` is a convenience
+    wrapper that drives the async generator on a thread of its own, with a
+    second event loop; pairing it with an ``asyncio.run`` for the session left
+    two loops and two default executors in one long-lived worker process. The
+    SDK fetches credentials through ``asyncio.to_thread``, so it needs a live
+    executor, and by the second or third job of a task there was not one.
+
+    ADK swallows that failure and yields events regardless, so it arrived as
+    "the model produced no answer" — an infrastructure error filed as though the
+    agent had been asked and had nothing to say. The one repository that got
+    that far was lost to it.
+
+    One loop, one executor, session and generation together. ``run_async`` is
+    also the interface ADK documents for anything that is not a notebook.
+    """
+    from google.genai import types
+
+    async def drive() -> list[Any]:
+        await runner.session_service.create_session(
+            app_name=APP_NAME, user_id=AGENT_USER, session_id=session_id
+        )
+        message = types.Content(role="user", parts=[types.Part(text=prompt)])
+        return [
+            event
+            async for event in runner.run_async(
+                user_id=AGENT_USER, session_id=session_id, new_message=message
+            )
+        ]
+
+    try:
+        return asyncio.run(drive())
+    except Exception as exc:  # the SDK's failures are not one exception type
+        raise ModelUnreachable(f"{type(exc).__name__}: {exc}"[:500]) from exc
 
 
 def proposal_from(events: Sequence[Any]) -> RepairProposal:

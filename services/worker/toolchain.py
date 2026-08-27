@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +39,7 @@ from nightshift_core.manifests import (
     rewrite_pin,
 )
 from nightshift_core.models import Dependency, Vulnerability
+from services.worker.interpreter import choose_interpreter
 
 __all__ = [
     "DiffStats",
@@ -115,9 +115,13 @@ class TestReport:
     def internal_error(self) -> bool:
         """True for pytest's own failures (3) and misuse of its CLI (4).
 
-        These are faults on *our* side of the line — a broken invocation, not a
-        broken repository — so they become ``INFRA_ERROR`` rather than being
-        blamed on the code under test.
+        These were read as faults on *our* side of the line — a broken
+        invocation rather than a broken repository. A fleet run corrected that:
+        two repositories returned exit 3 and exit 4 on every single delivery
+        while thirty-seven others took the identical invocation and ran. An
+        argument list that is wrong is wrong everywhere, so what this actually
+        marks is a repository whose own test runner will not start here —
+        deterministic, and therefore not something a retry can improve.
 
         Exit 2 is deliberately not in here. It means collection was interrupted,
         which after an upgrade is the single most common shape of a real break:
@@ -193,6 +197,29 @@ class Sandbox:
             env=env,
             check=False,
         )
+
+
+def _silent_failure(returncode: int) -> str:
+    """What to record when a failed command wrote nothing at all.
+
+    `SkyRL` and `VeOmni` both arrived as "the project would not install" with an
+    empty `last error:` under it, which is the least useful sentence the fleet
+    can produce: it names a repository without naming a cause, and two of them
+    in one run look like a pattern in other people's code rather than one in
+    ours.
+
+    A negative return code is a signal, and a build that is killed mid-wheel has
+    not written its error yet — the usual reason being that the container ran
+    out of memory linking something large. That is a line in the deployment, not
+    a fact about the repository, and the note has to be able to say so.
+    """
+    if returncode < 0:
+        return (
+            f"the command was killed by signal {-returncode} before it wrote anything; "
+            "on this fleet that is almost always the container running out of memory "
+            "while a wheel is being built"
+        )
+    return f"the command exited {returncode} without writing anything to stdout or stderr"
 
 
 def _tail(text: str, limit: int = MAX_OUTPUT_CHARS) -> str:
@@ -442,12 +469,17 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     swallowed exception.
     """
     venv_path = venv_path or repo_path.parent / ".venv"
+
+    # Which Python, before anything is installed with it. The fleet used to
+    # offer every repository the interpreter running the worker, and a project
+    # that asked for 3.9 got 3.12 and failed on `distutils` — a verdict about
+    # our container, filed as one about the repository. See interpreter.py.
+    choice = choose_interpreter(repo_path)
     created = subprocess.run(
-        # The interpreter running us, not a `python3` we hope is on PATH. In the
-        # container they are the same thing; on a Windows machine `python3` is
+        # Never a bare `python3` we hope is on PATH: on a Windows machine that is
         # either absent or the Store's stub that opens a shop page, and the
         # failure arrives as "virtualenv creation failed" with an empty stderr.
-        [sys.executable, "-m", "venv", str(venv_path)],
+        [str(choice.python), "-m", "venv", str(venv_path)],
         capture_output=True,
         text=True,
         timeout=INSTALL_TIMEOUT,
@@ -458,6 +490,13 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
 
     python = venv_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     sandbox = Sandbox(repo_path=repo_path, python=python)
+    # First line of the install log on purpose. Every later line is about the
+    # project; this one is about what we offered it, and it is the first thing
+    # worth knowing when the rest of the log is a wall of build errors.
+    sandbox.install_log.append(
+        f"interpreter {choice.version or 'inherited'} ({choice.source})"
+        + (f" for {choice.requirement}" if choice.requirement else "")
+    )
 
     # Why the last attempt failed, not merely that it did. The install log used
     # to record "base:-e . -> failed" and throw the output away, so every
@@ -469,14 +508,24 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     last_failure: list[str] = []
 
     def pip(arguments: Sequence[str], label: str) -> bool:
-        result = sandbox.run(
-            [python, "-m", "pip", "install", "-q", *arguments], timeout=INSTALL_TIMEOUT
-        )
+        # Not `-q`. Quiet pip is quiet about failures too, and the tail of a
+        # verbose log is the error message we came for; the head of it is
+        # discarded a few lines below anyway.
+        try:
+            result = sandbox.run(
+                [python, "-m", "pip", "install", *arguments], timeout=INSTALL_TIMEOUT
+            )
+        except subprocess.TimeoutExpired:
+            sandbox.install_log.append(f"{label} -> timed out after {INSTALL_TIMEOUT}s")
+            last_failure[:] = [f"pip was still running after {INSTALL_TIMEOUT}s and was killed"]
+            return False
         combined = (result.stdout or "") + (result.stderr or "")
         ok = result.returncode == 0 and _MISSING_EXTRA not in combined
-        sandbox.install_log.append(f"{label} -> {'ok' if ok else 'failed'}")
+        sandbox.install_log.append(
+            f"{label} -> " + ("ok" if ok else f"failed (exit {result.returncode})")
+        )
         if not ok:
-            last_failure[:] = [_tail(combined, 1200)]
+            last_failure[:] = [_tail(combined, 1200) or _silent_failure(result.returncode)]
         return ok
 
     pip(["-U", "pip", "setuptools", "wheel"], "bootstrap")

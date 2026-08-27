@@ -141,7 +141,11 @@ def _publisher() -> Any:
     Cached because a scan fans out to every affected repository in the fleet,
     and a client per message would open a connection per message.
     """
-    from google.cloud import pubsub_v1
+    # `google.cloud` is an implicit namespace package, so mypy resolves the
+    # package and then cannot follow the distribution's submodule into it and
+    # reports the submodule as a missing attribute. The import is correct at
+    # runtime and is the one the Pub/Sub client documents.
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 
     return pubsub_v1.PublisherClient()
 

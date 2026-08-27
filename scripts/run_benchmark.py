@@ -35,7 +35,7 @@ import json
 import logging
 import sys
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -94,19 +94,19 @@ class CaseResult:
 REQUIRED = ("id", "package", "from_version", "to_version")
 
 
-def _require(case: dict[str, object], where: str) -> None:
+def _require(case: Mapping[str, object], where: str) -> None:
     missing = [key for key in REQUIRED if not case.get(key)]
     if missing:
         raise ValueError(f"{where} is missing {', '.join(missing)}")
 
 
 def load_case(directory: Path) -> dict[str, object]:
-    case = json.loads((directory / "case.json").read_text(encoding="utf-8"))
+    case: dict[str, object] = json.loads((directory / "case.json").read_text(encoding="utf-8"))
     _require(case, f"{directory.name}/case.json")
     return case
 
 
-def job_for(case: dict[str, object], repo: str) -> RepoJob:
+def job_for(case: Mapping[str, object], repo: str) -> RepoJob:
     """The job the scanner would have published for this case.
 
     Built by hand rather than by asking OSV, and deliberately: a fixture pinned
