@@ -110,6 +110,37 @@ APPLICATION_QUERIES: tuple[str, ...] = tuple(
     f"{_APPLICATION_BASE} topic:{topic}" for topic in ("flask", "django", "fastapi")
 )
 
+#: The band the other two queries exclude by construction.
+#:
+#: Both of them ask for `pushed:>2025-06-01`, and a repository that has been
+#: touched in the last three months keeps its dependencies current. A dependency
+#: that is current has no advisory whose only fix is a major version away, and an
+#: upgrade that moves a patch release does not break a suite. Eleven repositories
+#: were upgraded in one night and not one of them broke — which is not the fleet
+#: working, it is the fleet never being asked the question it exists to answer.
+#:
+#: What breaks has the opposite shape: untouched long enough for the ecosystem to
+#: move underneath it, and small and pure enough to still build. `jinja2 2.11`,
+#: the only repair this project has ever performed, is exactly that — one import
+#: that moved to another package between two majors.
+#:
+#: Never archived: an archived repository cannot receive a pull request, so a
+#: repair against one is a repair nobody can accept. Smaller than either other
+#: band, because dormant and large is the combination that does not install —
+#: the pinned world it was written for is no longer on PyPI in that shape.
+#:
+#: Two windows rather than one date range, because GitHub sorts by stars within
+#: a query and a single wide window returns the same few hundred famous
+#: abandoned projects for both halves of it.
+_DORMANT_EXCLUSIONS = (
+    "-topic:machine-learning -topic:deep-learning -topic:awesome -topic:tutorial"
+)
+DORMANT_QUERIES: tuple[str, ...] = tuple(
+    f"language:python stars:30..2000 size:<8000 pushed:{window} archived:false "
+    f"{_DORMANT_EXCLUSIONS}"
+    for window in ("2022-06-01..2023-09-01", "2023-09-01..2024-12-01")
+)
+
 #: Path shapes that mean a machine can find the suite.
 _TEST_MARKERS = ("tests/", "test/", "conftest.py")
 
@@ -411,6 +442,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         dest="query",
         help="three searches — flask, django, fastapi — merged; asks for what we want "
         "rather than excluding what we do not",
+    )
+    proposer.add_argument(
+        "--dormant",
+        action="store_const",
+        const=list(DORMANT_QUERIES),
+        dest="query",
+        help="repositories last touched between one and three years ago: the only "
+        "population whose advisories are old enough for the fix to be a major "
+        "version away, and therefore the only one where an upgrade breaks anything",
     )
     proposer.add_argument("--search", type=int, default=200, help="how many to assess")
     proposer.add_argument("--limit", type=int, default=50, help="how many to propose")

@@ -40,6 +40,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 __all__ = [
     "CANDIDATES",
+    "FALLBACK",
     "InterpreterChoice",
     "choose_interpreter",
     "declared_requirement",
@@ -56,6 +57,20 @@ log = logging.getLogger("nightshift.interpreter")
 #: modern packaging stack, and a repository that cannot be built on 3.8 is not
 #: one this project can help tonight.
 CANDIDATES = ("3.12", "3.11", "3.10", "3.9", "3.8")
+
+#: The interpreter to try when the repository said nothing and the modern one
+#: could not build it.
+#:
+#: `requires-python` only became common around 2019, so a repository dormant
+#: since before then declares nothing and gets whatever the worker is running.
+#: What it actually pins is the world of its last commit — `click 5.0`,
+#: `flask 1.1.1`, `jinja2 2.10.1` — and those were built for an interpreter that
+#: still had `distutils` and still had wheels published for it.
+#:
+#: 3.9 rather than 3.8: 3.8 is far enough past its end of life that PyPI is
+#: starting to lose the wheels, and a fallback that has to build everything from
+#: source is a fallback that times out.
+FALLBACK = "3.9"
 
 #: How long `uv` gets to fetch an interpreter. Generous because the first fetch
 #: for a version downloads a build; every later one is a cache hit.

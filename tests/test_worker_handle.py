@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from services.worker import main as worker
+from services.worker.interpreter import InterpreterChoice
 from services.worker.pull_request import PullRequestBlocked
 from services.worker.repair import RepairProposal
 from services.worker.toolchain import EnvironmentBuildError, Sandbox, TestReport
@@ -84,7 +85,14 @@ def patched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> pytest.MonkeyPat
     root.mkdir()
     sandbox = Sandbox(repo_path=root, python=Path("/usr/bin/python3"))
     monkeypatch.setattr(worker, "clone", lambda repo, workspace, token=None: root)
-    monkeypatch.setattr(worker, "build_environment", lambda path: sandbox)
+    # `**kwargs` because the worker now chooses the interpreter and hands it
+    # down: a stub with the old signature would fail on the argument rather
+    # than on anything this test is about.
+    monkeypatch.setattr(worker, "build_environment", lambda path, **kw: sandbox)
+    # No second rung by default. Asking for one downloads an interpreter, and a
+    # unit test that reaches the network is a unit test that fails on a train.
+    # The ladder has its own test below, with a stub in place of the download.
+    monkeypatch.setattr(worker, "older_interpreter", lambda path: None)
     monkeypatch.setattr(worker, "apply_upgrade", lambda sandbox, vulns: ["requirements.txt"])
     monkeypatch.setattr(
         worker,
@@ -108,12 +116,74 @@ def run(store: MemoryJobStore | None = None, settings: Settings = SETTINGS) -> R
 
 
 def test_an_unbuildable_environment_is_counted_not_raised(patched: pytest.MonkeyPatch) -> None:
-    def boom(path: Path) -> Sandbox:
+    def boom(path: Path, **kwargs: object) -> Sandbox:
         raise EnvironmentBuildError("no recognised manifest")
 
     patched.setattr(worker, "build_environment", boom)
     job = run()
     assert job.outcome is Outcome.UNBUILDABLE
+
+
+def test_a_repository_that_will_not_build_is_offered_the_world_it_was_written_for(
+    patched: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The second rung, and why there is one.
+
+    `requires-python` only became common around 2019, so a repository dormant
+    since before then declares nothing and is handed whatever the worker runs.
+    What it pins is the world of its last commit, built for an interpreter that
+    still had `distutils` and still had wheels published for it. Six dormant
+    repositories went through the fleet in one run: two would not install and
+    three had nothing in the suite passing, every one of them on an interpreter
+    we chose rather than one they asked for.
+    """
+    _patch_baseline(patched, collected=10, failing=0)
+    offered: list[object] = []
+    older = InterpreterChoice(python=tmp_path / "python3.9", version="3.9", source="stub")
+    patched.setattr(worker, "older_interpreter", lambda path: older)
+
+    def only_the_old_world(path: Path, **kwargs: object) -> Sandbox:
+        offered.append(kwargs.get("choice"))
+        if kwargs.get("choice") is None:
+            raise EnvironmentBuildError("the project would not install")
+        return Sandbox(repo_path=path, python=Path("/usr/bin/python3"))
+
+    patched.setattr(worker, "build_environment", only_the_old_world)
+    job = run()
+
+    assert offered == [None, older], "the modern interpreter first, then the older one"
+    assert job.outcome is Outcome.PATCHED_CLEAN, "the second rung is a real attempt"
+
+
+def test_the_ladder_stops_at_two_rungs(patched: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Each rung is a full environment build inside a job with a wall clock. A
+    ladder without a ceiling is how a job spends its whole half hour proving what
+    the first rung already said."""
+    attempts = 0
+    older = InterpreterChoice(python=tmp_path / "python3.9", version="3.9", source="stub")
+    patched.setattr(worker, "older_interpreter", lambda path: older)
+
+    def never_builds(path: Path, **kwargs: object) -> Sandbox:
+        nonlocal attempts
+        attempts += 1
+        raise EnvironmentBuildError("the project would not install")
+
+    patched.setattr(worker, "build_environment", never_builds)
+    job = run()
+
+    assert attempts == 2
+    assert job.outcome is Outcome.UNBUILDABLE
+    assert "older interpreter" in job.notes, "both rungs are in the record, not just the last"
+
+
+def test_a_repository_that_stated_its_python_is_not_second_guessed(tmp_path: Path) -> None:
+    """It was given what it asked for. Reaching outside the range it published
+    is not a second attempt, it is ignoring the answer."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nrequires-python = ">=3.11"\n', encoding="utf-8"
+    )
+
+    assert worker.older_interpreter(tmp_path) is None
 
 
 def test_a_suite_that_collects_nothing_is_unbuildable(patched: pytest.MonkeyPatch) -> None:

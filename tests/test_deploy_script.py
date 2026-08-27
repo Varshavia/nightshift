@@ -233,3 +233,24 @@ def test_pubsub_is_allowed_to_move_the_message_itself() -> None:
     text = DEPLOY.read_text(encoding="utf-8")
     assert "gcp-sa-pubsub.iam.gserviceaccount.com" in text
     assert 'gcloud pubsub topics add-iam-policy-binding "$DEAD_LETTER"' in text
+
+
+def test_an_api_that_is_already_on_is_not_switched_on_again() -> None:
+    """Enabling is a mutation whether or not it changes anything.
+
+    Mutations are rated per minute against whichever project is paying for the
+    call, and from Cloud Shell that is Cloud Shell's own project — shared with
+    everyone else using it. Re-enabling nine APIs on every deployment spent that
+    budget on no change at all, and eventually the deployment stopped at its
+    first line with RESOURCE_EXHAUSTED against a project number that is not
+    ours and that we cannot raise a quota on.
+
+    A script that claims to be idempotent should not be writing on the way to
+    finding out nothing needs writing.
+    """
+    text = DEPLOY.read_text(encoding="utf-8")
+
+    assert "gcloud services list --enabled" in text, "read before you write"
+    assert 'gcloud services enable "${missing[@]}"' in text, (
+        "only the missing ones; enabling the full list unconditionally is the bug"
+    )
