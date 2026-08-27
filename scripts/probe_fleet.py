@@ -413,7 +413,13 @@ def wrong_platform() -> str:
     is legitimate. It is a flag rather than the default, so the result is a
     choice somebody made rather than an accident.
     """
-    if sys.platform.startswith("linux"):
+    # Through a local, because mypy folds `sys.platform` tests away at
+    # type-check time using the platform it is running on: on Linux it decides
+    # this function returns "" and everything below is dead code, and reports
+    # the message the fleet depends on as unreachable. The value is a runtime
+    # fact, and reading it through a variable keeps it one.
+    running_on = sys.platform
+    if running_on.startswith("linux"):
         return ""
     return (
         f"the probe measures the fleet's container, and this is {sys.platform}.\n"
