@@ -291,9 +291,9 @@ def test_no_search_query_uses_a_logical_operator_between_qualifiers() -> None:
     are always ANDed, so the union has to be several searches merged on our
     side. This test is what stops the tidier-looking version coming back.
     """
-    from scripts.build_fork_pool import APPLICATION_QUERIES, DEFAULT_QUERY
+    from scripts.build_fork_pool import APPLICATION_QUERIES, DEFAULT_QUERY, DORMANT_QUERIES
 
-    for query in (DEFAULT_QUERY, *APPLICATION_QUERIES):
+    for query in (DEFAULT_QUERY, *APPLICATION_QUERIES, *DORMANT_QUERIES):
         assert " OR " not in query, query
         assert " NOT " not in query, query
 
@@ -305,6 +305,50 @@ def test_the_application_queries_ask_for_one_framework_each() -> None:
     assert sorted(topics) == ["django", "fastapi", "flask"]
     for query in APPLICATION_QUERIES:
         assert query.count("topic:") == 1, "two topics in one query means neither matches"
+
+
+def test_the_dormant_band_asks_for_the_only_repositories_that_can_break() -> None:
+    """The other two queries cannot produce a repair, by construction.
+
+    Both require `pushed:>2025-06-01`, and a repository touched in the last
+    three months has current dependencies. A current dependency has no advisory
+    whose only fix is a major version away, and a patch-release upgrade does not
+    break a suite: eleven repositories were upgraded in one night and every one
+    came back PATCHED_CLEAN. The fleet was working perfectly and was never asked
+    the question it exists to answer.
+    """
+    from scripts.build_fork_pool import APPLICATION_QUERIES, DEFAULT_QUERY, DORMANT_QUERIES
+
+    for query in (DEFAULT_QUERY, *APPLICATION_QUERIES):
+        assert "pushed:>" in query, "the premise of this test, stated"
+
+    assert DORMANT_QUERIES, "the band has to exist to be reachable"
+    for query in DORMANT_QUERIES:
+        assert "pushed:>" not in query, "a recent push is what we are excluding"
+        assert ".." in query.split("pushed:", 1)[1], "a window, not an open end"
+
+
+def test_a_dormant_candidate_is_still_one_a_pull_request_can_reach() -> None:
+    """An archived repository accepts nothing. A repair against one is a repair
+    nobody can merge, which is a more expensive way of doing nothing than not
+    proposing it at all."""
+    from scripts.build_fork_pool import DORMANT_QUERIES
+
+    for query in DORMANT_QUERIES:
+        assert "archived:false" in query
+
+
+def test_the_dormant_band_stays_small() -> None:
+    """Dormant and large is the one combination that will not install: the
+    pinned world it was written for is no longer on PyPI in that shape, and the
+    verdict comes back UNBUILDABLE after a full container has been paid for."""
+    from scripts.build_fork_pool import DEFAULT_QUERY, DORMANT_QUERIES
+
+    def cap(query: str) -> int:
+        return int(query.split("size:<", 1)[1].split(" ", 1)[0])
+
+    for query in DORMANT_QUERIES:
+        assert cap(query) < cap(DEFAULT_QUERY)
 
 
 def test_an_advisory_against_build_tooling_is_not_evidence_of_a_break() -> None:
