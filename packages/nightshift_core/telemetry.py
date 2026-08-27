@@ -148,7 +148,8 @@ def _install_cloud_exporter(provider: Any, project: str) -> None:
     except ImportError:
         log.info("cloud trace exporter not installed; spans stay in process")
         return
-    provider.add_span_processor(BatchSpanProcessor(CloudTraceSpanExporter(project_id=project)))
+    exporter = CloudTraceSpanExporter(project_id=project)  # type: ignore[no-untyped-call]
+    provider.add_span_processor(BatchSpanProcessor(exporter))
 
 
 def recorder() -> SpanRecorder | None:

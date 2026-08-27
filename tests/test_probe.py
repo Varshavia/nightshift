@@ -9,6 +9,7 @@ project's central claim is wrong, so it gets its own tests.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,7 +24,6 @@ from scripts.probe_fleet import (
 from services.worker.toolchain import TestReport, collection_counts, failing_ids
 
 from nightshift_core.fleet import FleetEntry, FleetPool, save_pool
-
 
 #: These tests stub the prober out, so what they exercise is argument handling
 #: and output — this machine is exactly what they mean to measure. Said with the
@@ -308,7 +308,7 @@ def test_the_probe_refuses_to_measure_the_wrong_operating_system(
     system" — a wrong number that looks like a finding, which is worse than a
     wrong number.
     """
-    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(probe_fleet, "probe_fleet", _must_not_run)
 
     code = probe_fleet.main(["--repos", str(_repo_file(tmp_path))])
@@ -322,14 +322,14 @@ def _must_not_run(repos: Sequence[str]) -> list[ProbeResult]:
 
 
 def test_the_probe_runs_where_the_fleet_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(probe_fleet.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     assert probe_fleet.wrong_platform() == ""
 
 
 def test_measuring_this_machine_has_to_be_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
     """A quick single-repository run while debugging is legitimate. It is a flag
     rather than the default, so the result is a choice somebody made."""
-    monkeypatch.setattr(probe_fleet.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     message = probe_fleet.wrong_platform()
 
     assert "--allow-host-platform" in message
@@ -340,7 +340,7 @@ def test_the_escape_hatch_actually_lets_a_run_through(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A guard nobody can get past becomes a guard somebody deletes."""
-    monkeypatch.setattr(probe_fleet.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(probe_fleet, "probe_fleet", lambda repos: [])
 
     code = probe_fleet.main(

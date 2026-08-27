@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -194,6 +193,29 @@ class Sandbox:
             env=env,
             check=False,
         )
+
+
+def _silent_failure(returncode: int) -> str:
+    """What to record when a failed command wrote nothing at all.
+
+    `SkyRL` and `VeOmni` both arrived as "the project would not install" with an
+    empty `last error:` under it, which is the least useful sentence the fleet
+    can produce: it names a repository without naming a cause, and two of them
+    in one run look like a pattern in other people's code rather than one in
+    ours.
+
+    A negative return code is a signal, and a build that is killed mid-wheel has
+    not written its error yet — the usual reason being that the container ran
+    out of memory linking something large. That is a line in the deployment, not
+    a fact about the repository, and the note has to be able to say so.
+    """
+    if returncode < 0:
+        return (
+            f"the command was killed by signal {-returncode} before it wrote anything; "
+            "on this fleet that is almost always the container running out of memory "
+            "while a wheel is being built"
+        )
+    return f"the command exited {returncode} without writing anything to stdout or stderr"
 
 
 def _tail(text: str, limit: int = MAX_OUTPUT_CHARS) -> str:
@@ -482,14 +504,24 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     last_failure: list[str] = []
 
     def pip(arguments: Sequence[str], label: str) -> bool:
-        result = sandbox.run(
-            [python, "-m", "pip", "install", "-q", *arguments], timeout=INSTALL_TIMEOUT
-        )
+        # Not `-q`. Quiet pip is quiet about failures too, and the tail of a
+        # verbose log is the error message we came for; the head of it is
+        # discarded a few lines below anyway.
+        try:
+            result = sandbox.run(
+                [python, "-m", "pip", "install", *arguments], timeout=INSTALL_TIMEOUT
+            )
+        except subprocess.TimeoutExpired:
+            sandbox.install_log.append(f"{label} -> timed out after {INSTALL_TIMEOUT}s")
+            last_failure[:] = [f"pip was still running after {INSTALL_TIMEOUT}s and was killed"]
+            return False
         combined = (result.stdout or "") + (result.stderr or "")
         ok = result.returncode == 0 and _MISSING_EXTRA not in combined
-        sandbox.install_log.append(f"{label} -> {'ok' if ok else 'failed'}")
+        sandbox.install_log.append(
+            f"{label} -> " + ("ok" if ok else f"failed (exit {result.returncode})")
+        )
         if not ok:
-            last_failure[:] = [_tail(combined, 1200)]
+            last_failure[:] = [_tail(combined, 1200) or _silent_failure(result.returncode)]
         return ok
 
     pip(["-U", "pip", "setuptools", "wheel"], "bootstrap")

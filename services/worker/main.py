@@ -472,7 +472,8 @@ def consume(
     Renewing that by hand and forgetting to would hand the same repository to a
     second worker halfway through the first one's repair.
     """
-    from google.cloud import pubsub_v1
+    # An implicit namespace package mypy cannot follow into; see the scanner.
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 
     settings = settings or get_settings()
     settings.require_cloud()

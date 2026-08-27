@@ -86,4 +86,4 @@ def test_a_case_missing_its_transition_fails_loudly() -> None:
     """Silently defaulting a version would run the pipeline against nothing and
     report the result as though a measurement had been taken."""
     with pytest.raises(ValueError, match="to_version"):
-        job_for({"id": "x", "package": "jinja2", "from_version": "2.11.3"}, "org/x")  # type: ignore[arg-type]
+        job_for({"id": "x", "package": "jinja2", "from_version": "2.11.3"}, "org/x")
