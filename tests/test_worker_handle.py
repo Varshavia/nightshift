@@ -176,14 +176,32 @@ def test_the_ladder_stops_at_two_rungs(patched: pytest.MonkeyPatch, tmp_path: Pa
     assert "older interpreter" in job.notes, "both rungs are in the record, not just the last"
 
 
-def test_a_repository_that_stated_its_python_is_not_second_guessed(tmp_path: Path) -> None:
-    """It was given what it asked for. Reaching outside the range it published
-    is not a second attempt, it is ignoring the answer."""
+def test_a_repository_that_named_a_ceiling_is_not_second_guessed(tmp_path: Path) -> None:
+    """It was given what it asked for. Reaching past a bound it published is not
+    a second attempt, it is ignoring the answer."""
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nrequires-python = ">=3.11"\n', encoding="utf-8"
+        '[project]\nrequires-python = ">=3.8,<3.10"\n', encoding="utf-8"
     )
 
     assert worker.older_interpreter(tmp_path) is None
+
+
+def test_an_open_ended_requirement_does_not_close_the_door(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`bonobo` publishes `>=3.5` from a setup.py written before 3.7 existed.
+
+    Treated as a statement about 3.12 it bought forty-one collection errors and
+    one passing test, and no second attempt, because the repository had
+    technically "said something".
+    """
+    (tmp_path / "setup.py").write_text("setup(python_requires='>=3.5')\n", encoding="utf-8")
+    # The fetch is a download; what is under test is whether one is asked for.
+    monkeypatch.setattr(worker, "resolve", lambda version, **kw: tmp_path / "python3.9")
+
+    choice = worker.older_interpreter(tmp_path)
+
+    assert choice is not None and choice.version == "3.9"
 
 
 def test_a_suite_that_collects_nothing_is_unbuildable(patched: pytest.MonkeyPatch) -> None:

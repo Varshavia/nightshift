@@ -42,6 +42,7 @@ __all__ = [
     "CANDIDATES",
     "FALLBACK",
     "InterpreterChoice",
+    "bounded_above",
     "choose_interpreter",
     "declared_requirement",
     "resolve",
@@ -152,6 +153,25 @@ def _satisfying(requirement: str) -> list[str]:
     # `.0` because a bare "3.9" is not a version a specifier can test, and the
     # patch level never appears in a `requires-python` bound that matters here.
     return [version for version in CANDIDATES if specifier.contains(f"{version}.0")]
+
+
+def bounded_above(requirement: str) -> bool:
+    """Does this requirement actually rule out a version that does not exist yet?
+
+    `bonobo` says `python_requires=">=3.5"`, written when "later" meant 3.7. Read
+    as a statement about 3.12 it is a promise the project never made and cannot
+    keep: the run that read it that way collected forty-one errors and one
+    passing test. An open-ended lower bound says which interpreters are too old,
+    and nothing whatever about which are too new.
+
+    So it counts as an answer when choosing where to start, and as no answer at
+    all when deciding whether a second attempt is allowed.
+    """
+    try:
+        specifier = SpecifierSet(requirement)
+    except InvalidSpecifier:
+        return False
+    return any(spec.operator in {"<", "<=", "==", "===", "~="} for spec in specifier)
 
 
 def resolve(version: str, *, timeout: float = INSTALL_TIMEOUT) -> Path | None:

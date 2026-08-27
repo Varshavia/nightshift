@@ -485,7 +485,13 @@ def build_environment(
         # Never a bare `python3` we hope is on PATH: on a Windows machine that is
         # either absent or the Store's stub that opens a shop page, and the
         # failure arrives as "virtualenv creation failed" with an empty stderr.
-        [str(choice.python), "-m", "venv", str(venv_path)],
+        # `--clear` because this function is called more than once for the same
+        # clone. `python -m venv` over an existing directory leaves the
+        # interpreter that made it, so the second attempt — the whole point of
+        # which is a different interpreter — silently reused the first one's
+        # environment and recorded the version it had asked for. Two
+        # repositories were reported as unbuildable on 3.9 by a 3.12 venv.
+        [str(choice.python), "-m", "venv", "--clear", str(venv_path)],
         capture_output=True,
         text=True,
         timeout=INSTALL_TIMEOUT,

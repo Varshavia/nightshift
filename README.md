@@ -141,28 +141,55 @@ open](https://github.com/Varshavia/nightshift-case-jinja2-2.11-to-3.1/pull/1).
 We wrote this case, so it says something about the agent and nothing about the
 world.
 
-**Tier B — the wild set, and the number that surprised us.** 42 forked
-repositories, 57 verdicts reached in the deployed fleet:
+**Tier B — the wild set.** 48 forked repositories, 144 verdicts across every
+deployed run, **14 pull requests open on real repositories**.
+
+The most recent full pass over the 39-repository pool:
 
 | | |
 |---|---|
-| Reached the upgrade | 0 |
-| `BASELINE_RED` — the suite does not pass here | 32 |
-| `UNBUILDABLE` — the environment would not come up | 19 |
-| `INFRA_ERROR` — our own fault, mostly a bad pytest invocation | 6 |
+| `PATCHED_CLEAN` — upgraded, suite still green, pull request opened | 11 |
+| `UNBUILDABLE` — the environment would not come up | 18 |
+| `BASELINE_RED` — the suite does not pass here | 7 |
+| `PATCHED_REPAIRED` — the upgrade broke something and the agent fixed it | 0 |
 
-Zero repairs, and the reason is not that the agent failed. **It is that fifty-one
-of fifty-seven repositories never got as far as being asked.** The bottleneck in
-automated dependency repair is not the repair — it is reproducing somebody
-else's environment well enough to run their tests: system libraries, fixtures
-that want a database, wheels that exist for one platform.
+The first version of this table read *0 reached the upgrade, 51 of 57
+repositories never got as far as being asked*. Closing that gap is most of what
+the project learned, and none of it was in the domain logic:
 
-The second finding is quieter and cuts the same way. OSV answers with the
+- Every clone reached `git commit` and died on **"Author identity unknown"** — a
+  container has no git identity. Fifty-one repositories were cloned, built,
+  measured, upgraded and tested, and thrown away one command short of the pull
+  request they had earned.
+- The model was never reachable from Cloud Run at all. ADK's synchronous runner
+  drives its generator on a second event loop, and paired with an `asyncio.run`
+  for the session it left a long-lived worker minting credentials through a
+  closed executor. It surfaced as *"the model produced no answer"* — an outage
+  filed as though the agent had been asked and had nothing to say.
+- `pytest` exit 3 and exit 4 were classified as our fault and returned to the
+  queue. Two repositories produced one on every delivery, for ever, and
+  thirty-one of fifty-two finished jobs in one night were that loop.
+- A repository dormant since before 2019 declares no `requires-python`, so it was
+  handed the worker's own 3.12 — while what it pins was built for an interpreter
+  that still had `distutils`. It now gets a second attempt in the world it was
+  written for. The first version of that retry silently reused the first
+  attempt's virtualenv, because `python -m venv` over an existing directory keeps
+  the interpreter that made it.
+
+**Zero wild repairs, and the reason is not the agent.** OSV answers with the
 *lowest* version carrying a fix, which is usually a patch release, and patch
-releases break almost nothing. Most security upgrades genuinely are a version
-bump — Dependabot handles them and Nightshift has nothing to add. What the fleet
-is for is the minority where the fix is a major version away, which is why
-candidates are ranked by `likely_to_break` rather than by advisory count.
+releases break almost nothing — every one of the fourteen pull requests is an
+upgrade that left the suite green. Dependabot handles those and Nightshift has
+nothing to add. What the fleet is for is the minority where the only published
+fix is a major version away, which is why candidates are ranked by
+`likely_to_break`, and why the search now includes a band of repositories nobody
+has touched in one to three years: a maintained project has no advisory old
+enough to break anything.
+
+The intersection is narrower than we expected, and that is itself the finding:
+in this population, **buildability and breakage are anti-correlated.** The
+repositories that reproduce cleanly are modern and safe to upgrade; the ones
+carrying a dangerous pin are the ones whose environment no longer exists.
 
 Neither number is flattering and both are the point. A repair rate computed over
 a denominator we curated would have been higher and worth less.
