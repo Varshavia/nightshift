@@ -43,6 +43,12 @@ from nightshift_core.models import Outcome, Phase, RepoJob
 from nightshift_core.policy import Budget, PolicyEngine
 from nightshift_core.store import FirestoreJobStore, JobStore
 from services.worker.agent import ModelUnreachable, build_repair_agent
+from services.worker.interpreter import (
+    FALLBACK,
+    InterpreterChoice,
+    declared_requirement,
+    resolve,
+)
 from services.worker.librarian import Librarian, build_librarian, shelve_repair
 from services.worker.pull_request import PullRequestBlocked, PyGithubClient, open_pr
 from services.worker.repair import RepairAgent, run_repair_loop
@@ -166,6 +172,105 @@ def _job_store(settings: Settings) -> JobStore:
     )
 
 
+def older_interpreter(repo_path: Path) -> InterpreterChoice | None:
+    """The second rung, or None when there is not one.
+
+    Only for a repository that declared nothing. A project that states a range
+    has already been given what it asked for, and reaching outside that range is
+    not a second attempt — it is ignoring the answer.
+    """
+    if declared_requirement(repo_path)[0]:
+        return None
+    python = resolve(FALLBACK)
+    if python is None:
+        return None
+    return InterpreterChoice(
+        python=python,
+        version=FALLBACK,
+        source="nothing declared, and the newest interpreter could not build it",
+    )
+
+
+def _interpreter_line(sandbox: Sandbox) -> str:
+    """Which interpreter an attempt used. The first thing build_environment logs."""
+    return sandbox.install_log[0] if sandbox.install_log else "interpreter unrecorded"
+
+
+def _ladder_note(trail: list[str]) -> str:
+    """Every rung, in order, because the last one alone is misleading.
+
+    "the project would not install" against 3.9 reads as a repository nobody can
+    build. "3.12 could not, and 3.9 could not either" reads as what it is.
+    """
+    if not trail:
+        return "no interpreter produced an environment"
+    if len(trail) == 1:
+        return trail[0][:1400]
+    return "\n\n--- then, on an older interpreter ---\n\n".join(part[:900] for part in trail)
+
+
+def judge_baseline(report: TestReport) -> tuple[Outcome, str] | None:
+    """What a baseline says before anything is upgraded — or None when it is fine.
+
+    One function because this rule has now been written three times and drifted
+    twice. The worker and the probe once disagreed about what a red baseline
+    meant, and while they disagreed the fleet threw away thirty-five usable
+    repositories and filed our container's limitations as theirs.
+
+    The three cases it separates were learned the same way, over two measurement
+    rounds. A suite where *nothing* passes is a fact about the repository. A
+    suite where a tenth passes is a fact about us. A suite where one test out of
+    a hundred is red is neither, and it is the common case: `flask-jwt-extended`
+    fails three modules on an optional dependency and has ninety-nine usable
+    tests underneath them.
+    """
+    if report.internal_error:
+        # Not INFRA_ERROR, which is nacked and comes straight back. `AIF360` and
+        # `flask-security` returned exit 3 and exit 4 on every delivery for as
+        # long as the fleet has been running, each one costing a full container
+        # and a full environment build, while other repositories waited behind
+        # them. Thirty-one of fifty-two finished jobs in one night were this.
+        #
+        # Same shape as "collected no tests", and the same answer: an outcome we
+        # already have, with a note that says which one, rather than a new enum
+        # member. See docs/decisions/0003.
+        return Outcome.UNBUILDABLE, (
+            f"pytest exit {report.exit_code}: the repository's own test runner "
+            "would not start here"
+        )
+    if not report.collected:
+        # No tests means the suite cannot serve as evidence that a repair worked.
+        return Outcome.UNBUILDABLE, "pytest collected no tests"
+
+    passing = report.tests_collected - len(report.failures)
+    if passing <= 0:
+        return Outcome.BASELINE_RED, (
+            f"pytest exit {report.exit_code}; nothing in the suite passes\n\n"
+            # The note used to stop at the exit code, and BASELINE_RED is the
+            # verdict the fleet gives most often. Three dormant repositories came
+            # back with it in one run and there was no way to tell whether their
+            # suites were broken, their dependencies unbuildable on the
+            # interpreter we chose, or something we had done — so the next move
+            # was a guess. A verdict that cannot be acted on is barely a verdict.
+            + _tail_for_notes(report.output)
+        )
+    if passing * 2 < report.tests_collected:
+        # Our limitation, stated as one. Kept out of BASELINE_RED so the count of
+        # repositories that arrived broken is not padded with our own failures.
+        return Outcome.UNBUILDABLE, (
+            f"only {passing} of {report.tests_collected} tests pass before we "
+            "change anything; the environment is wrong, not the repository\n\n"
+            + _tail_for_notes(report.output)
+        )
+    return None
+
+
+def _tail_for_notes(output: str, limit: int = 900) -> str:
+    """The end of a test run, which is where pytest puts the reason."""
+    text = output.strip()
+    return text if len(text) <= limit else "... [truncated] ...\n" + text[-limit:]
+
+
 def handle(
     job: RepoJob,
     store: JobStore,
@@ -240,68 +345,58 @@ def _run(
     )
 
     checkpoint(Phase.BASELINE)
-    try:
-        sandbox = build_environment(repo_path)
-    except EnvironmentBuildError as exc:
-        return finish(Outcome.UNBUILDABLE, notes=str(exc)[:500])
 
-    baseline = run_tests(sandbox)
+    # Two attempts, and the second one is in the old world.
+    #
+    # `requires-python` only became common around 2019, so a repository dormant
+    # since before then declares nothing, interpreter.py has nothing to read,
+    # and it gets whatever the worker is running. What it actually pins is the
+    # world of its last commit, and those packages were built for an interpreter
+    # that still had `distutils` and still had wheels published for it. Of six
+    # dormant repositories in one run, two would not install and three had
+    # nothing in the suite passing — every one of them on an interpreter we
+    # chose rather than one they asked for.
+    #
+    # Only when the repository declared nothing. A project that states a range
+    # has been given what it asked for, and trying something outside that range
+    # is not a second attempt, it is ignoring the answer.
+    #
+    # Never more than two: each rung is a full environment build, and a ladder
+    # without a ceiling is how a job spends its whole half hour proving what the
+    # first rung already said.
+    sandbox = None
+    baseline = None
+    verdict: tuple[Outcome, str] | None = None
+    trail: list[str] = []
+    choice: InterpreterChoice | None = None
+    for rung in range(2):
+        if rung:
+            # Asked for only now, never on the happy path: fetching an
+            # interpreter is a download, and most repositories build first time.
+            choice = older_interpreter(repo_path)
+            if choice is None:
+                break
+        try:
+            attempt = build_environment(repo_path, choice=choice)
+        except EnvironmentBuildError as exc:
+            trail.append(str(exc))
+            continue
+        measured = run_tests(attempt)
+        verdict = judge_baseline(measured)
+        sandbox, baseline = attempt, measured
+        if verdict is None:
+            break
+        trail.append(f"{_interpreter_line(attempt)}\n{verdict[1]}")
+
+    if sandbox is None or baseline is None:
+        # Nothing on the ladder produced an environment at all.
+        return finish(Outcome.UNBUILDABLE, notes=_ladder_note(trail))
+    if verdict is not None:
+        outcome, _ = verdict
+        return finish(outcome, notes=_ladder_note(trail))
+
     job.baseline_green = baseline.passed
-    if baseline.internal_error:
-        # Not INFRA_ERROR, which is nacked and comes straight back. `AIF360` and
-        # `flask-security` returned exit 3 and exit 4 on every delivery for as
-        # long as the fleet has been running, each one costing a full container
-        # and a full environment build, while other repositories waited behind
-        # them. Thirty-one of fifty-two finished jobs in one night were this.
-        #
-        # Same shape as "collected no tests", and the same answer: an outcome we
-        # already have, with a note that says which one, rather than a new enum
-        # member. See docs/decisions/0003.
-        return finish(
-            Outcome.UNBUILDABLE,
-            notes=(
-                f"pytest exit {baseline.exit_code}: the repository's own test "
-                "runner would not start here"
-            ),
-        )
-    if not baseline.collected:
-        # No tests means the suite cannot serve as evidence that a repair worked.
-        # Reported as UNBUILDABLE with an explicit note rather than given its own
-        # enum member: adding one requires an ADR. See docs/decisions/0003.
-        return finish(Outcome.UNBUILDABLE, notes="pytest collected no tests")
-
-    # What the probe learned over two measurement rounds, and the worker did not.
-    #
-    # This gate used to be `if not baseline.passed` — one red test anywhere and
-    # the repository was recorded as having arrived broken. Fifty-eight
-    # repositories went through the fleet under that rule and not one reached
-    # the upgrade: thirty-five were filed BASELINE_RED, which reads as a fact
-    # about them and was usually a fact about our container. A maintained
-    # project does not ship a suite that is ninety percent red.
-    #
-    # The replacement is looser in one direction and stricter in the other. A
-    # repository with a hundred passing tests and one failing on a crypto
-    # backend this image lacks is usable — flask-jwt-extended, thrown away by
-    # the old rule — and what counts as a break afterwards is what the upgrade
-    # *changed*, not what was already red. See scripts/probe_fleet.py, where
-    # this is the same code and the same three cases.
     already_failing = baseline.failures
-    passing = baseline.tests_collected - len(already_failing)
-    if passing <= 0:
-        return finish(
-            Outcome.BASELINE_RED,
-            notes=f"pytest exit {baseline.exit_code}; nothing in the suite passes",
-        )
-    if passing * 2 < baseline.tests_collected:
-        # Our limitation, stated as one. Kept out of BASELINE_RED so the count of
-        # repositories that arrived broken is not padded with our own failures.
-        return finish(
-            Outcome.UNBUILDABLE,
-            notes=(
-                f"only {passing} of {baseline.tests_collected} tests pass before we "
-                "change anything; the environment is wrong, not the repository"
-            ),
-        )
 
     checkpoint(Phase.UPGRADE)
     fixable = job.actionable_vulnerabilities

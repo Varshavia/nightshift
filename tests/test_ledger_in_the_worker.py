@@ -74,7 +74,10 @@ def patched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> pytest.MonkeyPat
     root.mkdir()
     sandbox = Sandbox(repo_path=root, python=Path("/usr/bin/python3"))
     monkeypatch.setattr(worker, "clone", lambda repo, workspace, token=None: root)
-    monkeypatch.setattr(worker, "build_environment", lambda path: sandbox)
+    # `**kwargs` because the worker now chooses the interpreter and hands it
+    # down: a stub with the old signature would fail on the argument rather
+    # than on anything this test is about.
+    monkeypatch.setattr(worker, "build_environment", lambda path, **kw: sandbox)
     monkeypatch.setattr(worker, "apply_upgrade", lambda sandbox, vulns: ["requirements.txt"])
     monkeypatch.setattr(
         worker,

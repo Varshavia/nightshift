@@ -39,7 +39,7 @@ from nightshift_core.manifests import (
     rewrite_pin,
 )
 from nightshift_core.models import Dependency, Vulnerability
-from services.worker.interpreter import choose_interpreter
+from services.worker.interpreter import InterpreterChoice, choose_interpreter
 
 __all__ = [
     "DiffStats",
@@ -456,7 +456,9 @@ def _collects(sandbox: Sandbox) -> bool:
     return collected > 0
 
 
-def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sandbox:
+def build_environment(
+    repo_path: Path, *, venv_path: Path | None = None, choice: InterpreterChoice | None = None
+) -> Sandbox:
     """Create a virtualenv, install the project, then make its suite importable.
 
     Two phases on purpose. Getting the project installed is not the same problem
@@ -474,7 +476,11 @@ def build_environment(repo_path: Path, *, venv_path: Path | None = None) -> Sand
     # offer every repository the interpreter running the worker, and a project
     # that asked for 3.9 got 3.12 and failed on `distutils` — a verdict about
     # our container, filed as one about the repository. See interpreter.py.
-    choice = choose_interpreter(repo_path)
+    #
+    # The caller may have chosen already. It does that when the interpreter this
+    # module would pick has been tried and could not build the repository, which
+    # is a fact only the caller is in a position to know.
+    choice = choice or choose_interpreter(repo_path)
     created = subprocess.run(
         # Never a bare `python3` we hope is on PATH: on a Windows machine that is
         # either absent or the Store's stub that opens a shop page, and the
