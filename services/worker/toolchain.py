@@ -115,9 +115,13 @@ class TestReport:
     def internal_error(self) -> bool:
         """True for pytest's own failures (3) and misuse of its CLI (4).
 
-        These are faults on *our* side of the line — a broken invocation, not a
-        broken repository — so they become ``INFRA_ERROR`` rather than being
-        blamed on the code under test.
+        These were read as faults on *our* side of the line — a broken
+        invocation rather than a broken repository. A fleet run corrected that:
+        two repositories returned exit 3 and exit 4 on every single delivery
+        while thirty-seven others took the identical invocation and ran. An
+        argument list that is wrong is wrong everywhere, so what this actually
+        marks is a repository whose own test runner will not start here —
+        deterministic, and therefore not something a retry can improve.
 
         Exit 2 is deliberately not in here. It means collection was interrupted,
         which after an upgrade is the single most common shape of a real break:

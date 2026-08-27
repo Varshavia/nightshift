@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
-from services.worker.pull_request import PullRequestBlocked, open_pr
+from services.worker.pull_request import IDENTITY, PullRequestBlocked, open_pr
 from services.worker.toolchain import Sandbox
 
 from nightshift_core.config import Settings
@@ -27,17 +28,29 @@ class FakeGitHub:
 def sandbox(tmp_path: Path) -> Sandbox:
     root = tmp_path / "repo"
     root.mkdir()
-    for argv in (
-        ["git", "init", "-q"],
-        ["git", "config", "user.email", "fleet@example.com"],
-        ["git", "config", "user.name", "Nightshift"],
-    ):
-        subprocess.run(argv, cwd=root, check=True, capture_output=True)
+    # No `git config user.*`. The fixture used to write an identity into the
+    # clone and so tested a repository that had one — which is the single thing
+    # a freshly cloned repository in a container does not have. The suite was
+    # green while every pull request the fleet earned died on "Author identity
+    # unknown", fifty-one of them in one night.
+    #
+    # The developer's own global config would put the identity back, so it is
+    # pointed at a file that does not exist. What is left is what the worker
+    # actually gets.
+    absent = root.parent / "there-is-no-git-config-here"
+    bare = {"GIT_CONFIG_GLOBAL": str(absent), "GIT_CONFIG_SYSTEM": str(absent)}
+    env = {**os.environ, **bare}
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True, capture_output=True, env=env)
     (root / "app.py").write_text("from jinja2 import Markup\n", encoding="utf-8")
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-qm", "initial"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True, env=env)
+    subprocess.run(
+        ["git", *IDENTITY, "commit", "-qm", "initial"],
+        cwd=root, check=True, capture_output=True, env=env,
+    )
     (root / "app.py").write_text("from markupsafe import Markup\n", encoding="utf-8")
-    return Sandbox(repo_path=root, python=Path("/usr/bin/python3"))
+    sandbox = Sandbox(repo_path=root, python=Path("/usr/bin/python3"))
+    sandbox.env.update(bare)
+    return sandbox
 
 
 def make_job(repo: str = "nightshift-fleet/example") -> RepoJob:
@@ -125,6 +138,50 @@ def test_the_branch_is_created_and_the_change_committed(sandbox: Sandbox) -> Non
         capture_output=True, text=True, check=True,
     ).stdout
     assert status.strip() == "", "the repair should be committed, not left dirty"
+
+
+def test_the_commit_is_authored_without_any_identity_being_configured(
+    sandbox: Sandbox,
+) -> None:
+    """The line that lost a night's work.
+
+    `git commit` refuses to run without an author, and a container has no
+    identity to offer it. Fifty-one repositories were cloned, built, measured,
+    upgraded and tested — all of it paid for — and then died here, one command
+    short of the pull request they had earned. The fleet reported them as
+    infrastructure errors and put them back on the queue to do it all again.
+
+    The clone this runs against has no configured identity and cannot see one,
+    so the only place the author can come from is the command itself.
+    """
+    open_pr(
+        make_job(), sandbox, engine_for(sandbox, LOCAL), LOCAL, FakeGitHub(),
+        baseline_green=True, model="gemini-3.5-flash",
+    )
+    author = subprocess.run(
+        ["git", "log", "-1", "--format=%an <%ae>"], cwd=sandbox.repo_path,
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    assert author == "Nightshift <nightshift@users.noreply.github.com>"
+
+
+def test_the_identity_never_touches_the_repository_it_commits_to(
+    sandbox: Sandbox,
+) -> None:
+    """A worker builds many clones in one container. An identity written into a
+    clone is state the next repository inherits without asking, and the reason
+    for `-c` over `git config`."""
+    open_pr(
+        make_job(), sandbox, engine_for(sandbox, LOCAL), LOCAL, FakeGitHub(),
+        baseline_green=True, model="gemini-3.5-flash",
+    )
+    configured = subprocess.run(
+        ["git", "config", "--local", "--get", "user.email"],
+        cwd=sandbox.repo_path, capture_output=True, text=True, check=False,
+    )
+
+    assert configured.returncode != 0, "the clone must be left as it was found"
 
 
 def test_the_body_reaches_github_with_the_disclosure(sandbox: Sandbox) -> None:
